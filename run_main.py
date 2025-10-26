@@ -12,6 +12,12 @@ FTP_SERVER_IP = None
 FTP_USERNAME = None
 FTP_PASSWORD = None
 
+# Default values
+DEFAULT_HOSTNAME = "default_host"
+DEFAULT_VLAN_ID = "0"
+DEFAULT_VLAN_NAME = "default_vlan"
+DEFAULT_LOCATION = "default_location"
+
 class TemplateManager:
     def __init__(self, template_dir="templates"):
         self.template_dir = Path(template_dir)
@@ -198,79 +204,11 @@ class SFTPLoginDialog(simpledialog.Dialog):
         self.username = self.user_entry.get().strip()
         self.password = self.pass_entry.get().strip()
 
-class NetworkConfigEditor:
-    """Simple network configuration editor dialog"""
-    def __init__(self, parent, network_config):
-        self.parent = parent
-        self.network_config = network_config
-        self.editor_window = None
-    
-    def show_editor(self):
-        """Show network configuration editor"""
-        self.editor_window = tk.Toplevel(self.parent)
-        self.editor_window.title("Network Configuration")
-        self.editor_window.geometry("600x400")
-        self.editor_window.transient(self.parent)
-        self.editor_window.grab_set()
-        
-        # Main frame
-        main_frame = ttk.Frame(self.editor_window, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        title_label = ttk.Label(main_frame, text="Network Configuration", 
-                               font=("Arial", 14, "bold"))
-        title_label.pack(pady=(0, 10))
-        
-        # Text area for JSON editing
-        ttk.Label(main_frame, text="Edit network configuration (JSON format):").pack(anchor=tk.W)
-        
-        text_frame = ttk.Frame(main_frame)
-        text_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        self.config_text = tk.Text(text_frame, height=20)
-        self.config_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.config_text.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.config_text.configure(yscrollcommand=scrollbar.set)
-        
-        # Load current configuration
-        self.config_text.insert(1.0, json.dumps(self.network_config.config, indent=4))
-        
-        # Buttons
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=10)
-        
-        ttk.Button(button_frame, text="Save", 
-                  command=self.save_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Reload", 
-                  command=self.reload_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Close", 
-                  command=self.editor_window.destroy).pack(side=tk.RIGHT, padx=5)
-    
-    def save_config(self):
-        """Save the edited configuration"""
-        try:
-            new_config = json.loads(self.config_text.get(1.0, tk.END))
-            self.network_config.config = new_config
-            self.network_config.save_config()
-            messagebox.showinfo("Success", "Network configuration saved successfully!")
-        except json.JSONDecodeError as e:
-            messagebox.showerror("Error", f"Invalid JSON: {e}")
-    
-    def reload_config(self):
-        """Reload configuration from file"""
-        self.network_config.load_config()
-        self.config_text.delete(1.0, tk.END)
-        self.config_text.insert(1.0, json.dumps(self.network_config.config, indent=4))
-        messagebox.showinfo("Success", "Configuration reloaded from file!")
-
 class SwitchConfigGenerator:
     def __init__(self, root):
         self.root = root
         self.root.title("Aruba Switch Configuration Generator")
-        self.root.geometry("600x750")
+        self.root.geometry("600x700")
         
         # Initialize managers
         self.template_manager = TemplateManager()
@@ -311,10 +249,13 @@ class SwitchConfigGenerator:
         # Hostname
         ttk.Label(main_frame, text="Hostname:").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.hostname_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.hostname_var).grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5)
+        hostname_entry = ttk.Entry(main_frame, textvariable=self.hostname_var)
+        hostname_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Add placeholder text
+        hostname_entry.insert(0, DEFAULT_HOSTNAME)
         
-        # Management IP
-        ttk.Label(main_frame, text="Management IP:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        # Management IP (Required)
+        ttk.Label(main_frame, text="Management IP *:").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.management_ip_var = tk.StringVar()
         management_ip_entry = ttk.Entry(main_frame, textvariable=self.management_ip_var)
         management_ip_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
@@ -322,35 +263,43 @@ class SwitchConfigGenerator:
         # Location
         ttk.Label(main_frame, text="Location:").grid(row=4, column=0, sticky=tk.W, pady=5)
         self.location_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.location_var).grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
+        location_entry = ttk.Entry(main_frame, textvariable=self.location_var)
+        location_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Add placeholder text
+        location_entry.insert(0, DEFAULT_LOCATION)
         
         # Data VLAN ID
         ttk.Label(main_frame, text="Data VLAN ID:").grid(row=5, column=0, sticky=tk.W, pady=5)
         self.data_vlan_id_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.data_vlan_id_var).grid(row=5, column=1, sticky=(tk.W, tk.E), pady=5)
+        data_vlan_id_entry = ttk.Entry(main_frame, textvariable=self.data_vlan_id_var)
+        data_vlan_id_entry.grid(row=5, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Add placeholder text
+        data_vlan_id_entry.insert(0, DEFAULT_VLAN_ID)
         
         # Data VLAN Name
         ttk.Label(main_frame, text="Data VLAN Name:").grid(row=6, column=0, sticky=tk.W, pady=5)
         self.data_vlan_name_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.data_vlan_name_var).grid(row=6, column=1, sticky=(tk.W, tk.E), pady=5)
+        data_vlan_name_entry = ttk.Entry(main_frame, textvariable=self.data_vlan_name_var)
+        data_vlan_name_entry.grid(row=6, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Add placeholder text
+        data_vlan_name_entry.insert(0, DEFAULT_VLAN_NAME)
         
-        # MAC Address
-        ttk.Label(main_frame, text="MAC Address:").grid(row=7, column=0, sticky=tk.W, pady=5)
+        # MAC Address (Required)
+        ttk.Label(main_frame, text="MAC Address *:").grid(row=7, column=0, sticky=tk.W, pady=5)
         self.mac_address_var = tk.StringVar()
         ttk.Entry(main_frame, textvariable=self.mac_address_var).grid(row=7, column=1, sticky=(tk.W, tk.E), pady=5)
+        
+        # Serial Number (Required)
+        ttk.Label(main_frame, text="Serial Number *:").grid(row=8, column=0, sticky=tk.W, pady=5)
+        self.serial_number_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=self.serial_number_var).grid(row=8, column=1, sticky=(tk.W, tk.E), pady=5)
         
         # Upload option
         self.upload_var = tk.BooleanVar()
         upload_check = ttk.Checkbutton(main_frame, text="Upload to SFTP server", 
                                       variable=self.upload_var,
                                       command=self.on_upload_toggle)
-        upload_check.grid(row=8, column=0, columnspan=2, pady=10)
-        
-        # SFTP Status
-        self.sftp_status_var = tk.StringVar(value="SFTP: Not configured")
-        sftp_status_label = ttk.Label(main_frame, textvariable=self.sftp_status_var, 
-                                     foreground="red")
-        sftp_status_label.grid(row=9, column=0, columnspan=2, pady=5)
+        upload_check.grid(row=9, column=0, columnspan=2, pady=10)
         
         # Buttons
         button_frame = ttk.Frame(main_frame)
@@ -362,34 +311,33 @@ class SwitchConfigGenerator:
         ttk.Button(button_frame, text="Clear All", 
                   command=self.clear_all).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(button_frame, text="Configure SFTP", 
-                  command=self.configure_sftp).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(button_frame, text="Edit Network Config", 
-                  command=self.edit_network_config).pack(side=tk.LEFT, padx=5)
-        
         ttk.Button(button_frame, text="Exit", 
                   command=self.root.quit).pack(side=tk.LEFT, padx=5)
         
+        # Required fields note
+        required_note = ttk.Label(main_frame, text="* Required fields", 
+                                 font=("Arial", 9, "italic"), foreground="red")
+        required_note.grid(row=11, column=0, columnspan=2, pady=(5, 0))
+        
         # Output text area
-        ttk.Label(main_frame, text="Output:").grid(row=11, column=0, sticky=tk.W, pady=(20, 5))
+        ttk.Label(main_frame, text="Output:").grid(row=12, column=0, sticky=tk.W, pady=(20, 5))
         
         self.output_text = tk.Text(main_frame, height=15, width=70)
-        self.output_text.grid(row=12, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.output_text.grid(row=13, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
         # Scrollbar for output text
         scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.output_text.yview)
-        scrollbar.grid(row=12, column=2, sticky=(tk.N, tk.S))
+        scrollbar.grid(row=13, column=2, sticky=(tk.N, tk.S))
         self.output_text.configure(yscrollcommand=scrollbar.set)
         
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
         status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
-        status_bar.grid(row=13, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+        status_bar.grid(row=14, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
         
         # Configure grid weights
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(12, weight=1)
+        main_frame.rowconfigure(13, weight=1)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
     
@@ -404,37 +352,21 @@ class SwitchConfigGenerator:
         
         if dialog.server_ip and dialog.username and dialog.password:
             self.sftp_uploader.authenticate(dialog.server_ip, dialog.username, dialog.password)
-            self.sftp_status_var.set(f"SFTP: Connected to {dialog.server_ip} as {dialog.username}")
-            # Change color to green to indicate success
-            for widget in self.root.winfo_children():
-                if isinstance(widget, ttk.Frame):
-                    for child in widget.winfo_children():
-                        if isinstance(child, ttk.Label) and child.cget('textvariable') == str(self.sftp_status_var):
-                            child.configure(foreground="green")
             messagebox.showinfo("SFTP Configuration", "SFTP credentials configured successfully!")
         else:
-            self.sftp_status_var.set("SFTP: Not configured")
             self.upload_var.set(False)
-    
-    def edit_network_config(self):
-        """Open network configuration editor"""
-        editor = NetworkConfigEditor(self.root, self.network_config)
-        editor.show_editor()
+            messagebox.showwarning("SFTP Configuration", "SFTP configuration was cancelled.")
     
     def generate_config(self):
         """Generate configuration based on user input"""
         try:
             # Validate required fields
             if not all([
-                self.hostname_var.get(),
                 self.management_ip_var.get(),
-                self.location_var.get(),
-                self.data_vlan_id_var.get(),
-                self.data_vlan_name_var.get(),
                 self.mac_address_var.get(),
-                self.template_var.get()
+                self.serial_number_var.get()
             ]):
-                messagebox.showerror("Error", "Please fill in all required fields")
+                messagebox.showerror("Error", "Please fill in all required fields (*)")
                 return
             
             # Validate IP address
@@ -471,17 +403,23 @@ class SwitchConfigGenerator:
             self.status_var.set("Generating configuration...")
             self.root.update()
             
+            # Use default values for empty optional fields
+            hostname = self.hostname_var.get() or DEFAULT_HOSTNAME
+            data_vlan_id = self.data_vlan_id_var.get() or DEFAULT_VLAN_ID
+            data_vlan_name = self.data_vlan_name_var.get() or DEFAULT_VLAN_NAME
+            location = self.location_var.get() or DEFAULT_LOCATION
+            
             # Replace variables in template
-            config = template_content.replace("{{hostname}}", self.hostname_var.get())
+            config = template_content.replace("{{hostname}}", hostname)
             config = config.replace("{{management_ip}}", self.management_ip_var.get())
-            config = config.replace("{{data_vlan_id}}", self.data_vlan_id_var.get())
-            config = config.replace("{{data_vlan_name}}", self.data_vlan_name_var.get())
-            config = config.replace("{{snmp_location}}", self.location_var.get())
+            config = config.replace("{{data_vlan_id}}", data_vlan_id)
+            config = config.replace("{{data_vlan_name}}", data_vlan_name)
+            config = config.replace("{{snmp_location}}", location)
             config = config.replace("{{gateway}}", gateway)
             
             # Generate filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{self.hostname_var.get()}_{timestamp}.cfg"
+            filename = f"{hostname}_{timestamp}.cfg"
             local_file_path = self.output_dir / filename
             
             # Save configuration to file
@@ -531,9 +469,25 @@ class SwitchConfigGenerator:
         self.data_vlan_id_var.set("")
         self.data_vlan_name_var.set("")
         self.mac_address_var.set("")
+        self.serial_number_var.set("")
         self.output_text.delete(1.0, tk.END)
         self.upload_var.set(False)
         self.status_var.set("Ready")
+        
+        # Reset placeholder texts for optional fields
+        for widget in self.root.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Entry):
+                        if child.get() == "":
+                            if child in [self.hostname_var._root,]:
+                                child.insert(0, DEFAULT_HOSTNAME)
+                            elif child in [self.location_var._root,]:
+                                child.insert(0, DEFAULT_LOCATION)
+                            elif child in [self.data_vlan_id_var._root,]:
+                                child.insert(0, DEFAULT_VLAN_ID)
+                            elif child in [self.data_vlan_name_var._root,]:
+                                child.insert(0, DEFAULT_VLAN_NAME)
 
 def main():
     root = tk.Tk()
