@@ -357,6 +357,23 @@ class SwitchConfigGenerator:
             self.upload_var.set(False)
             messagebox.showwarning("SFTP Configuration", "SFTP configuration was cancelled.")
     
+    def generate_aruba_central_json(self, hostname, management_ip, data_vlan_id, data_vlan_name, 
+                                  location, gateway, mac_address, serial_number):
+        """Generate JSON file for Aruba Central"""
+        central_data = {
+            serial_number: {
+                "_sys_data_vlan_id": data_vlan_id,
+                "_sys_data_vlan_name": data_vlan_name,
+                "_sys_gateway": gateway,
+                "_sys_hostname": hostname,
+                "_sys_lan_mac": mac_address,
+                "_sys_location": location,
+                "_sys_mgnt_ip": management_ip,
+                "_sys_serial": serial_number
+            }
+        }
+        return central_data
+    
     def generate_config(self):
         """Generate configuration based on user input"""
         try:
@@ -408,10 +425,13 @@ class SwitchConfigGenerator:
             data_vlan_id = self.data_vlan_id_var.get() or DEFAULT_VLAN_ID
             data_vlan_name = self.data_vlan_name_var.get() or DEFAULT_VLAN_NAME
             location = self.location_var.get() or DEFAULT_LOCATION
+            mac_address = self.mac_address_var.get()
+            serial_number = self.serial_number_var.get()
+            management_ip = self.management_ip_var.get()
             
             # Replace variables in template
             config = template_content.replace("{{hostname}}", hostname)
-            config = config.replace("{{management_ip}}", self.management_ip_var.get())
+            config = config.replace("{{management_ip}}", management_ip)
             config = config.replace("{{data_vlan_id}}", data_vlan_id)
             config = config.replace("{{data_vlan_name}}", data_vlan_name)
             config = config.replace("{{snmp_location}}", location)
@@ -426,32 +446,53 @@ class SwitchConfigGenerator:
             with open(local_file_path, 'w') as f:
                 f.write(config)
             
+            # Generate Aruba Central JSON
+            central_json = self.generate_aruba_central_json(
+                hostname, management_ip, data_vlan_id, data_vlan_name, 
+                location, gateway, mac_address, serial_number
+            )
+            
+            # Save Aruba Central JSON file
+            central_filename = f"{hostname}_{timestamp}_central.json"
+            central_file_path = self.output_dir / central_filename
+            with open(central_file_path, 'w') as f:
+                json.dump(central_json, f, indent=2)
+            
             # Display configuration in output text
             self.output_text.delete(1.0, tk.END)
-            self.output_text.insert(1.0, config)
+            output_content = f"=== SWITCH CONFIGURATION ===\n{config}\n\n"
+            output_content += f"=== ARUBA CENTRAL JSON ===\n{json.dumps(central_json, indent=2)}"
+            self.output_text.insert(1.0, output_content)
             
             # Upload to SFTP if selected and authenticated
             if self.upload_var.get() and self.sftp_uploader.authenticated:
                 self.status_var.set("Uploading to SFTP...")
                 self.root.update()
                 
-                # Use MAC address as remote filename
-                remote_filename = f"{self.mac_address_var.get().replace(':', '').replace('-', '').lower()}.cfg"
+                # Use MAC address as remote filename for config
+                remote_filename = f"{mac_address.replace(':', '').replace('-', '').lower()}.cfg"
                 
                 if self.sftp_uploader.upload_with_sftp(str(local_file_path), remote_filename):
                     messagebox.showinfo("Success", 
                                       f"Configuration generated and uploaded successfully!\n\n"
-                                      f"Local file: {local_file_path}\n"
+                                      f"Local files:\n"
+                                      f"- {local_file_path}\n"
+                                      f"- {central_file_path}\n\n"
                                       f"Remote file: {remote_filename}")
                     self.status_var.set("Upload successful!")
                 else:
                     messagebox.showwarning("Upload Failed", 
                                          f"Configuration generated but upload failed!\n\n"
-                                         f"Local file: {local_file_path}")
+                                         f"Local files:\n"
+                                         f"- {local_file_path}\n"
+                                         f"- {central_file_path}")
                     self.status_var.set("Upload failed!")
             else:
                 messagebox.showinfo("Success", 
-                                  f"Configuration generated successfully!\n\nFile: {local_file_path}")
+                                  f"Configuration generated successfully!\n\n"
+                                  f"Files created:\n"
+                                  f"- {local_file_path}\n"
+                                  f"- {central_file_path}")
                 self.status_var.set("Configuration generated!")
                 
         except FileNotFoundError as e:
