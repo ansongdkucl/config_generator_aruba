@@ -61,26 +61,22 @@ class NetworkConfig:
     
     def _create_default_config(self):
         """Create default network configuration"""
-        # Just create a basic structure, user should populate the actual config file
         self.config = {
             "aruba-sw": {
                 "network_address": "172.22.27.0",
                 "subnet_mask": "255.255.255.0",
                 "gateway": "172.17.27.254",
-                "hosts_range": ["172.22.27.1", "172.22.27.253"],
-                "data_vlan": {
-                    "id": "100",
-                    "name": "Data_VLAN"
-                },
-                "profiles": {
-                    "av": {},
-                    "standard": {}
-                }
+                "hosts_range": ["172.22.27.1", "172.22.27.253"]
+            },
+            "aruba-tp": {
+                "network_address": "172.22.29.0",
+                "subnet_mask": "255.255.255.0",
+                "gateway": "172.22.29.254",
+                "hosts_range": ["172.22.29.1", "172.22.29.253"]
             }
         }
         self.save_config()
-        print(f"Created basic network configuration at {self.config_file}")
-        print("Please populate the network_config.json file with your network details and profiles")
+        print(f"Created default network configuration at {self.config_file}")
     
     def save_config(self):
         """Save network configuration to JSON file"""
@@ -123,81 +119,6 @@ class NetworkConfig:
         except Exception as e:
             print(f"Error calculating gateway: {e}")
             return "0.0.0.0"
-    
-    def get_profile_vlans(self, management_ip, profile_type):
-        """Get the VLANs for the specified profile type based on management IP location"""
-        try:
-            ip = ipaddress.IPv4Address(management_ip)
-            
-            # Check which network the IP belongs to
-            for network_name, network_config in self.config.items():
-                try:
-                    network = ipaddress.IPv4Network(
-                        f"{network_config['network_address']}/{network_config['subnet_mask']}", 
-                        strict=False
-                    )
-                    if ip in network:
-                        if 'profiles' in network_config and profile_type in network_config['profiles']:
-                            return network_config['profiles'][profile_type]
-                        else:
-                            print(f"No {profile_type} profile found for network {network_name}")
-                            return {}
-                except Exception as e:
-                    print(f"Error processing network {network_name}: {e}")
-                    continue
-            
-            print(f"No matching network found for {management_ip}")
-            return {}
-            
-        except Exception as e:
-            print(f"Error getting profile VLANs: {e}")
-            return {}
-    
-    def get_data_vlan_info(self, management_ip):
-        """Get data VLAN ID and name based on management IP location"""
-        try:
-            ip = ipaddress.IPv4Address(management_ip)
-            
-            # Check which network the IP belongs to
-            for network_name, network_config in self.config.items():
-                try:
-                    network = ipaddress.IPv4Network(
-                        f"{network_config['network_address']}/{network_config['subnet_mask']}", 
-                        strict=False
-                    )
-                    if ip in network:
-                        if 'data_vlan' in network_config:
-                            return network_config['data_vlan']['id'], network_config['data_vlan']['name']
-                        else:
-                            print(f"No data_vlan found for network {network_name}")
-                            return DEFAULT_VLAN_ID, DEFAULT_VLAN_NAME
-                except Exception as e:
-                    print(f"Error processing network {network_name}: {e}")
-                    continue
-            
-            print(f"No matching network found for {management_ip}")
-            return DEFAULT_VLAN_ID, DEFAULT_VLAN_NAME
-            
-        except Exception as e:
-            print(f"Error getting data VLAN info: {e}")
-            return DEFAULT_VLAN_ID, DEFAULT_VLAN_NAME
-    
-    def generate_hostname(self, management_ip, template_type):
-        """Generate hostname based on management IP and template type"""
-        try:
-            ip = ipaddress.IPv4Address(management_ip)
-            octets = str(ip).split('.')
-            
-            if template_type == "aruba-4100":
-                return f"ae4100i-{octets[1]}-{octets[2]}-{octets[3]}"
-            elif template_type == "aruba-6300":
-                return f"ae6300M-{octets[1]}-{octets[2]}-{octets[3]}"
-            else:
-                return f"{template_type}-{octets[1]}-{octets[2]}-{octets[3]}"
-                
-        except Exception as e:
-            print(f"Error generating hostname: {e}")
-            return DEFAULT_HOSTNAME
 
 class SFTPUploader:
     def __init__(self):
@@ -287,7 +208,7 @@ class SwitchConfigGenerator:
     def __init__(self, root):
         self.root = root
         self.root.title("Aruba Switch Configuration Generator")
-        self.root.geometry("600x750")
+        self.root.geometry("600x700")
         
         # Initialize managers
         self.template_manager = TemplateManager()
@@ -325,79 +246,64 @@ class SwitchConfigGenerator:
         template_combo.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5)
         template_combo.set(templates[0])  # Set first template as default
         
-        # Profile Selection
-        ttk.Label(main_frame, text="Profile:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        profile_frame = ttk.Frame(main_frame)
-        profile_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5)
-        
-        self.profile_var = tk.StringVar(value="standard")
-        self.standard_check = ttk.Checkbutton(profile_frame, text="Standard", 
-                                            variable=self.profile_var, 
-                                            onvalue="standard", offvalue="")
-        self.standard_check.pack(side=tk.LEFT, padx=(0, 10))
-        
-        self.av_check = ttk.Checkbutton(profile_frame, text="AV", 
-                                      variable=self.profile_var,
-                                      onvalue="av", offvalue="")
-        self.av_check.pack(side=tk.LEFT)
-        
         # Hostname
-        ttk.Label(main_frame, text="Hostname:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Hostname:").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.hostname_var = tk.StringVar()
         hostname_entry = ttk.Entry(main_frame, textvariable=self.hostname_var)
-        hostname_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
+        hostname_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Add placeholder text
+        hostname_entry.insert(0, DEFAULT_HOSTNAME)
         
         # Management IP (Required)
-        ttk.Label(main_frame, text="Management IP *:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Management IP *:").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.management_ip_var = tk.StringVar()
         management_ip_entry = ttk.Entry(main_frame, textvariable=self.management_ip_var)
-        management_ip_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
+        management_ip_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
         
         # Location
-        ttk.Label(main_frame, text="Location:").grid(row=5, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Location:").grid(row=4, column=0, sticky=tk.W, pady=5)
         self.location_var = tk.StringVar()
         location_entry = ttk.Entry(main_frame, textvariable=self.location_var)
-        location_entry.grid(row=5, column=1, sticky=(tk.W, tk.E), pady=5)
+        location_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
         # Add placeholder text
         location_entry.insert(0, DEFAULT_LOCATION)
         
         # Data VLAN ID
-        ttk.Label(main_frame, text="Data VLAN ID:").grid(row=6, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Data VLAN ID:").grid(row=5, column=0, sticky=tk.W, pady=5)
         self.data_vlan_id_var = tk.StringVar()
         data_vlan_id_entry = ttk.Entry(main_frame, textvariable=self.data_vlan_id_var)
-        data_vlan_id_entry.grid(row=6, column=1, sticky=(tk.W, tk.E), pady=5)
+        data_vlan_id_entry.grid(row=5, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Add placeholder text
+        data_vlan_id_entry.insert(0, DEFAULT_VLAN_ID)
         
         # Data VLAN Name
-        ttk.Label(main_frame, text="Data VLAN Name:").grid(row=7, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Data VLAN Name:").grid(row=6, column=0, sticky=tk.W, pady=5)
         self.data_vlan_name_var = tk.StringVar()
         data_vlan_name_entry = ttk.Entry(main_frame, textvariable=self.data_vlan_name_var)
-        data_vlan_name_entry.grid(row=7, column=1, sticky=(tk.W, tk.E), pady=5)
+        data_vlan_name_entry.grid(row=6, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Add placeholder text
+        data_vlan_name_entry.insert(0, DEFAULT_VLAN_NAME)
         
         # MAC Address (Required)
-        ttk.Label(main_frame, text="MAC Address *:").grid(row=8, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="MAC Address *:").grid(row=7, column=0, sticky=tk.W, pady=5)
         self.mac_address_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.mac_address_var).grid(row=8, column=1, sticky=(tk.W, tk.E), pady=5)
+        ttk.Entry(main_frame, textvariable=self.mac_address_var).grid(row=7, column=1, sticky=(tk.W, tk.E), pady=5)
         
         # Serial Number (Required)
-        ttk.Label(main_frame, text="Serial Number *:").grid(row=9, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Serial Number *:").grid(row=8, column=0, sticky=tk.W, pady=5)
         self.serial_number_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.serial_number_var).grid(row=9, column=1, sticky=(tk.W, tk.E), pady=5)
-        
-        # Auto-fill button
-        auto_fill_button = ttk.Button(main_frame, text="Auto-fill from Management IP", 
-                                    command=self.auto_fill_fields)
-        auto_fill_button.grid(row=10, column=0, columnspan=2, pady=10)
+        ttk.Entry(main_frame, textvariable=self.serial_number_var).grid(row=8, column=1, sticky=(tk.W, tk.E), pady=5)
         
         # Upload option
         self.upload_var = tk.BooleanVar()
         upload_check = ttk.Checkbutton(main_frame, text="Upload to SFTP server", 
                                       variable=self.upload_var,
                                       command=self.on_upload_toggle)
-        upload_check.grid(row=11, column=0, columnspan=2, pady=10)
+        upload_check.grid(row=9, column=0, columnspan=2, pady=10)
         
         # Buttons
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=12, column=0, columnspan=2, pady=10)
+        button_frame.grid(row=10, column=0, columnspan=2, pady=10)
         
         ttk.Button(button_frame, text="Generate Configuration", 
                   command=self.generate_config).pack(side=tk.LEFT, padx=5)
@@ -411,58 +317,29 @@ class SwitchConfigGenerator:
         # Required fields note
         required_note = ttk.Label(main_frame, text="* Required fields", 
                                  font=("Arial", 9, "italic"), foreground="red")
-        required_note.grid(row=13, column=0, columnspan=2, pady=(5, 0))
+        required_note.grid(row=11, column=0, columnspan=2, pady=(5, 0))
         
         # Output text area
-        ttk.Label(main_frame, text="Output:").grid(row=14, column=0, sticky=tk.W, pady=(20, 5))
+        ttk.Label(main_frame, text="Output:").grid(row=12, column=0, sticky=tk.W, pady=(20, 5))
         
         self.output_text = tk.Text(main_frame, height=15, width=70)
-        self.output_text.grid(row=15, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.output_text.grid(row=13, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
         # Scrollbar for output text
         scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.output_text.yview)
-        scrollbar.grid(row=15, column=2, sticky=(tk.N, tk.S))
+        scrollbar.grid(row=13, column=2, sticky=(tk.N, tk.S))
         self.output_text.configure(yscrollcommand=scrollbar.set)
         
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
         status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
-        status_bar.grid(row=16, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+        status_bar.grid(row=14, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
         
         # Configure grid weights
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(15, weight=1)
+        main_frame.rowconfigure(13, weight=1)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-    
-    def auto_fill_fields(self):
-        """Auto-fill hostname and data VLAN fields based on management IP"""
-        management_ip = self.management_ip_var.get().strip()
-        
-        if not management_ip:
-            messagebox.showwarning("Auto-fill", "Please enter Management IP first")
-            return
-        
-        try:
-            # Validate IP address
-            ipaddress.IPv4Address(management_ip)
-            
-            # Generate hostname
-            template_type = self.template_var.get()
-            hostname = self.network_config.generate_hostname(management_ip, template_type)
-            self.hostname_var.set(hostname)
-            
-            # Get data VLAN info
-            data_vlan_id, data_vlan_name = self.network_config.get_data_vlan_info(management_ip)
-            self.data_vlan_id_var.set(data_vlan_id)
-            self.data_vlan_name_var.set(data_vlan_name)
-            
-            messagebox.showinfo("Auto-fill", "Fields auto-filled successfully!")
-            
-        except ipaddress.AddressValueError:
-            messagebox.showerror("Auto-fill", "Invalid Management IP address")
-        except Exception as e:
-            messagebox.showerror("Auto-fill", f"Error auto-filling fields: {str(e)}")
     
     def on_upload_toggle(self):
         """Handle upload checkbox toggle"""
@@ -481,7 +358,7 @@ class SwitchConfigGenerator:
             messagebox.showwarning("SFTP Configuration", "SFTP configuration was cancelled.")
     
     def generate_aruba_central_json(self, hostname, management_ip, data_vlan_id, data_vlan_name, 
-                                  location, gateway, mac_address, serial_number, profile_type):
+                                  location, gateway, mac_address, serial_number):
         """Generate JSON file for Aruba Central"""
         central_data = {
             serial_number: {
@@ -495,12 +372,6 @@ class SwitchConfigGenerator:
                 "_sys_serial": serial_number
             }
         }
-        
-        # Add profile-specific VLANs
-        profile_vlans = self.network_config.get_profile_vlans(management_ip, profile_type)
-        for vlan_id, vlan_name in profile_vlans.items():
-            central_data[serial_number][f"_sys_{vlan_id}_vlan_name"] = vlan_name
-        
         return central_data
     
     def generate_config(self):
@@ -520,11 +391,6 @@ class SwitchConfigGenerator:
                 ipaddress.IPv4Address(self.management_ip_var.get())
             except ipaddress.AddressValueError:
                 messagebox.showerror("Error", "Invalid Management IP address")
-                return
-            
-            # Validate profile selection
-            if not self.profile_var.get():
-                messagebox.showerror("Error", "Please select a profile (Standard or AV)")
                 return
             
             # Check SFTP authentication if upload is selected
@@ -562,7 +428,6 @@ class SwitchConfigGenerator:
             mac_address = self.mac_address_var.get()
             serial_number = self.serial_number_var.get()
             management_ip = self.management_ip_var.get()
-            profile_type = self.profile_var.get()
             
             # Replace variables in template
             config = template_content.replace("{{hostname}}", hostname)
@@ -584,7 +449,7 @@ class SwitchConfigGenerator:
             # Generate Aruba Central JSON
             central_json = self.generate_aruba_central_json(
                 hostname, management_ip, data_vlan_id, data_vlan_name, 
-                location, gateway, mac_address, serial_number, profile_type
+                location, gateway, mac_address, serial_number
             )
             
             # Save Aruba Central JSON file
@@ -596,7 +461,7 @@ class SwitchConfigGenerator:
             # Display configuration in output text
             self.output_text.delete(1.0, tk.END)
             output_content = f"=== SWITCH CONFIGURATION ===\n{config}\n\n"
-            output_content += f"=== ARUBA CENTRAL JSON ({profile_type.upper()} PROFILE) ===\n{json.dumps(central_json, indent=2)}"
+            output_content += f"=== ARUBA CENTRAL JSON ===\n{json.dumps(central_json, indent=2)}"
             self.output_text.insert(1.0, output_content)
             
             # Upload to SFTP if selected and authenticated
@@ -610,7 +475,6 @@ class SwitchConfigGenerator:
                 if self.sftp_uploader.upload_with_sftp(str(local_file_path), remote_filename):
                     messagebox.showinfo("Success", 
                                       f"Configuration generated and uploaded successfully!\n\n"
-                                      f"Profile: {profile_type.upper()}\n\n"
                                       f"Local files:\n"
                                       f"- {local_file_path}\n"
                                       f"- {central_file_path}\n\n"
@@ -619,7 +483,6 @@ class SwitchConfigGenerator:
                 else:
                     messagebox.showwarning("Upload Failed", 
                                          f"Configuration generated but upload failed!\n\n"
-                                         f"Profile: {profile_type.upper()}\n\n"
                                          f"Local files:\n"
                                          f"- {local_file_path}\n"
                                          f"- {central_file_path}")
@@ -627,7 +490,6 @@ class SwitchConfigGenerator:
             else:
                 messagebox.showinfo("Success", 
                                   f"Configuration generated successfully!\n\n"
-                                  f"Profile: {profile_type.upper()}\n\n"
                                   f"Files created:\n"
                                   f"- {local_file_path}\n"
                                   f"- {central_file_path}")
@@ -649,10 +511,24 @@ class SwitchConfigGenerator:
         self.data_vlan_name_var.set("")
         self.mac_address_var.set("")
         self.serial_number_var.set("")
-        self.profile_var.set("standard")  # Reset to standard profile
         self.output_text.delete(1.0, tk.END)
         self.upload_var.set(False)
         self.status_var.set("Ready")
+        
+        # Reset placeholder texts for optional fields
+        for widget in self.root.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Entry):
+                        if child.get() == "":
+                            if child in [self.hostname_var._root,]:
+                                child.insert(0, DEFAULT_HOSTNAME)
+                            elif child in [self.location_var._root,]:
+                                child.insert(0, DEFAULT_LOCATION)
+                            elif child in [self.data_vlan_id_var._root,]:
+                                child.insert(0, DEFAULT_VLAN_ID)
+                            elif child in [self.data_vlan_name_var._root,]:
+                                child.insert(0, DEFAULT_VLAN_NAME)
 
 def main():
     root = tk.Tk()
