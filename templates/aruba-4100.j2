@@ -9,8 +9,8 @@ ntp server 193.60.251.3
 ntp enable
 !
 !
-tacacs-server host 10.28.50.99 key ciphertext goaheadpunk!
-tacacs-server host 10.36.50.99 key ciphertext goaheadpunk!
+tacacs-server host 10.28.50.99 key ciphertext wwfwfwfwfwfw
+tacacs-server host 10.36.50.99 key ciphertext sdwdwfwefefe
 !
 aaa authentication login console group tacacs local
 aaa authentication login ssh group tacacs local
@@ -35,8 +35,9 @@ logging 10.36.50.60 severity notice
 !
 !
 vlan {{data_vlan_id}}
-       {{data_vlan_name}}
+   name {{data_vlan_name}}
 !
+{{profile_vlans}}
 vlan 885
    name Switch-Management
 !

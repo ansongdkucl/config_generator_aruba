@@ -4,6 +4,7 @@ import json
 import ipaddress
 import os
 import paramiko
+import csv
 from datetime import datetime
 from pathlib import Path
 
@@ -138,6 +139,7 @@ class NetworkConfig:
                     )
                     if ip in network:
                         if 'profiles' in network_config and profile_type in network_config['profiles']:
+                            print(f"Found {profile_type} profile VLANs for network {network_name}: {network_config['profiles'][profile_type]}")
                             return network_config['profiles'][profile_type]
                         else:
                             print(f"No {profile_type} profile found for network {network_name}")
@@ -341,17 +343,19 @@ class SwitchConfigGenerator:
                                       onvalue="av", offvalue="")
         self.av_check.pack(side=tk.LEFT)
         
-        # Hostname
-        ttk.Label(main_frame, text="Hostname:").grid(row=3, column=0, sticky=tk.W, pady=5)
-        self.hostname_var = tk.StringVar()
-        hostname_entry = ttk.Entry(main_frame, textvariable=self.hostname_var)
-        hostname_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
-        
-        # Management IP (Required)
-        ttk.Label(main_frame, text="Management IP *:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        # Management IP (Required) - MOVED BEFORE HOSTNAME
+        ttk.Label(main_frame, text="Management IP *:").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.management_ip_var = tk.StringVar()
         management_ip_entry = ttk.Entry(main_frame, textvariable=self.management_ip_var)
-        management_ip_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
+        management_ip_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
+        # Bind auto-fill to management IP changes
+        management_ip_entry.bind('<FocusOut>', self.auto_fill_fields)
+        
+        # Hostname
+        ttk.Label(main_frame, text="Hostname:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        self.hostname_var = tk.StringVar()
+        hostname_entry = ttk.Entry(main_frame, textvariable=self.hostname_var)
+        hostname_entry.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
         
         # Location
         ttk.Label(main_frame, text="Location:").grid(row=5, column=0, sticky=tk.W, pady=5)
@@ -383,21 +387,16 @@ class SwitchConfigGenerator:
         self.serial_number_var = tk.StringVar()
         ttk.Entry(main_frame, textvariable=self.serial_number_var).grid(row=9, column=1, sticky=(tk.W, tk.E), pady=5)
         
-        # Auto-fill button
-        auto_fill_button = ttk.Button(main_frame, text="Auto-fill from Management IP", 
-                                    command=self.auto_fill_fields)
-        auto_fill_button.grid(row=10, column=0, columnspan=2, pady=10)
-        
         # Upload option
         self.upload_var = tk.BooleanVar()
         upload_check = ttk.Checkbutton(main_frame, text="Upload to SFTP server", 
                                       variable=self.upload_var,
                                       command=self.on_upload_toggle)
-        upload_check.grid(row=11, column=0, columnspan=2, pady=10)
+        upload_check.grid(row=10, column=0, columnspan=2, pady=10)
         
         # Buttons
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=12, column=0, columnspan=2, pady=10)
+        button_frame.grid(row=11, column=0, columnspan=2, pady=10)
         
         ttk.Button(button_frame, text="Generate Configuration", 
                   command=self.generate_config).pack(side=tk.LEFT, padx=5)
@@ -411,36 +410,35 @@ class SwitchConfigGenerator:
         # Required fields note
         required_note = ttk.Label(main_frame, text="* Required fields", 
                                  font=("Arial", 9, "italic"), foreground="red")
-        required_note.grid(row=13, column=0, columnspan=2, pady=(5, 0))
+        required_note.grid(row=12, column=0, columnspan=2, pady=(5, 0))
         
         # Output text area
-        ttk.Label(main_frame, text="Output:").grid(row=14, column=0, sticky=tk.W, pady=(20, 5))
+        ttk.Label(main_frame, text="Output:").grid(row=13, column=0, sticky=tk.W, pady=(20, 5))
         
         self.output_text = tk.Text(main_frame, height=15, width=70)
-        self.output_text.grid(row=15, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.output_text.grid(row=14, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         
         # Scrollbar for output text
         scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.output_text.yview)
-        scrollbar.grid(row=15, column=2, sticky=(tk.N, tk.S))
+        scrollbar.grid(row=14, column=2, sticky=(tk.N, tk.S))
         self.output_text.configure(yscrollcommand=scrollbar.set)
         
         # Status bar
         self.status_var = tk.StringVar(value="Ready")
         status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
-        status_bar.grid(row=16, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+        status_bar.grid(row=15, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
         
         # Configure grid weights
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(15, weight=1)
+        main_frame.rowconfigure(14, weight=1)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
     
-    def auto_fill_fields(self):
+    def auto_fill_fields(self, event=None):
         """Auto-fill hostname and data VLAN fields based on management IP"""
         management_ip = self.management_ip_var.get().strip()
         
         if not management_ip:
-            messagebox.showwarning("Auto-fill", "Please enter Management IP first")
             return
         
         try:
@@ -457,12 +455,11 @@ class SwitchConfigGenerator:
             self.data_vlan_id_var.set(data_vlan_id)
             self.data_vlan_name_var.set(data_vlan_name)
             
-            messagebox.showinfo("Auto-fill", "Fields auto-filled successfully!")
-            
         except ipaddress.AddressValueError:
-            messagebox.showerror("Auto-fill", "Invalid Management IP address")
+            # Invalid IP, do nothing
+            pass
         except Exception as e:
-            messagebox.showerror("Auto-fill", f"Error auto-filling fields: {str(e)}")
+            print(f"Error auto-filling fields: {str(e)}")
     
     def on_upload_toggle(self):
         """Handle upload checkbox toggle"""
@@ -479,6 +476,19 @@ class SwitchConfigGenerator:
         else:
             self.upload_var.set(False)
             messagebox.showwarning("SFTP Configuration", "SFTP configuration was cancelled.")
+    
+    def generate_profile_vlan_config(self, management_ip, profile_type):
+        """Generate VLAN configuration blocks for the selected profile"""
+        profile_vlans = self.network_config.get_profile_vlans(management_ip, profile_type)
+        vlan_config = ""
+        
+        if profile_vlans:
+            for vlan_id, vlan_name in profile_vlans.items():
+                vlan_config += f"vlan {vlan_id}\n"
+                vlan_config += f"   name {vlan_name}\n"
+                vlan_config += "!\n"
+        
+        return vlan_config
     
     def generate_aruba_central_json(self, hostname, management_ip, data_vlan_id, data_vlan_name, 
                                   location, gateway, mac_address, serial_number, profile_type):
@@ -498,10 +508,34 @@ class SwitchConfigGenerator:
         
         # Add profile-specific VLANs
         profile_vlans = self.network_config.get_profile_vlans(management_ip, profile_type)
-        for vlan_id, vlan_name in profile_vlans.items():
-            central_data[serial_number][f"_sys_{vlan_id}_vlan_name"] = vlan_name
+        print(f"Profile VLANs for {profile_type}: {profile_vlans}")  # Debug print
+        
+        if profile_vlans:
+            for vlan_id, vlan_name in profile_vlans.items():
+                central_data[serial_number][f"_sys_{vlan_id}_vlan_name"] = vlan_name
+            print(f"Added {len(profile_vlans)} profile VLANs to JSON")  # Debug print
+        else:
+            print(f"No profile VLANs found for {profile_type} profile")  # Debug print
         
         return central_data
+    
+    def save_csv_file(self, central_json, output_path):
+        """Save CSV version of the JSON data"""
+        try:
+            with open(output_path, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Write header
+                writer.writerow(['Variable', 'Value'])
+                
+                # Write data rows
+                for serial_number, data in central_json.items():
+                    for key, value in data.items():
+                        writer.writerow([key, value])
+                        
+            print(f"CSV file saved: {output_path}")
+        except Exception as e:
+            print(f"Error saving CSV file: {e}")
     
     def generate_config(self):
         """Generate configuration based on user input"""
@@ -564,6 +598,9 @@ class SwitchConfigGenerator:
             management_ip = self.management_ip_var.get()
             profile_type = self.profile_var.get()
             
+            # Generate profile VLAN configuration
+            profile_vlan_config = self.generate_profile_vlan_config(management_ip, profile_type)
+            
             # Replace variables in template
             config = template_content.replace("{{hostname}}", hostname)
             config = config.replace("{{management_ip}}", management_ip)
@@ -572,13 +609,27 @@ class SwitchConfigGenerator:
             config = config.replace("{{snmp_location}}", location)
             config = config.replace("{{gateway}}", gateway)
             
-            # Generate filename
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{hostname}_{timestamp}.cfg"
-            local_file_path = self.output_dir / filename
+            # Insert profile VLANs into the configuration
+            # Find the position to insert VLANs (after existing VLAN definitions)
+            if "{{profile_vlans}}" in template_content:
+                config = config.replace("{{profile_vlans}}", profile_vlan_config)
+            else:
+                # If no placeholder, insert after the data VLAN definition
+                vlan_insert_position = config.find(f"vlan {data_vlan_id}")
+                if vlan_insert_position != -1:
+                    # Find the end of the data VLAN block
+                    end_of_data_vlan = config.find("!", vlan_insert_position)
+                    if end_of_data_vlan != -1:
+                        # Insert profile VLANs after the data VLAN
+                        config = config[:end_of_data_vlan + 1] + "\n" + profile_vlan_config + config[end_of_data_vlan + 1:]
             
-            # Save configuration to file
-            with open(local_file_path, 'w') as f:
+            # Generate fixed filenames (overwrite each time)
+            config_file_path = self.output_dir / "config.cfg"
+            json_file_path = self.output_dir / "variables.json"
+            csv_file_path = self.output_dir / "variables.csv"
+            
+            # Save configuration to file (overwrite)
+            with open(config_file_path, 'w') as f:
                 f.write(config)
             
             # Generate Aruba Central JSON
@@ -587,11 +638,12 @@ class SwitchConfigGenerator:
                 location, gateway, mac_address, serial_number, profile_type
             )
             
-            # Save Aruba Central JSON file
-            central_filename = f"{hostname}_{timestamp}_central.json"
-            central_file_path = self.output_dir / central_filename
-            with open(central_file_path, 'w') as f:
+            # Save Aruba Central JSON file (overwrite)
+            with open(json_file_path, 'w') as f:
                 json.dump(central_json, f, indent=2)
+            
+            # Save CSV file (overwrite)
+            self.save_csv_file(central_json, csv_file_path)
             
             # Display configuration in output text
             self.output_text.delete(1.0, tk.END)
@@ -607,30 +659,33 @@ class SwitchConfigGenerator:
                 # Use MAC address as remote filename for config
                 remote_filename = f"{mac_address.replace(':', '').replace('-', '').lower()}.cfg"
                 
-                if self.sftp_uploader.upload_with_sftp(str(local_file_path), remote_filename):
+                if self.sftp_uploader.upload_with_sftp(str(config_file_path), remote_filename):
                     messagebox.showinfo("Success", 
                                       f"Configuration generated and uploaded successfully!\n\n"
                                       f"Profile: {profile_type.upper()}\n\n"
-                                      f"Local files:\n"
-                                      f"- {local_file_path}\n"
-                                      f"- {central_file_path}\n\n"
+                                      f"Local files (overwritten):\n"
+                                      f"- {config_file_path}\n"
+                                      f"- {json_file_path}\n"
+                                      f"- {csv_file_path}\n\n"
                                       f"Remote file: {remote_filename}")
                     self.status_var.set("Upload successful!")
                 else:
                     messagebox.showwarning("Upload Failed", 
                                          f"Configuration generated but upload failed!\n\n"
                                          f"Profile: {profile_type.upper()}\n\n"
-                                         f"Local files:\n"
-                                         f"- {local_file_path}\n"
-                                         f"- {central_file_path}")
+                                         f"Local files (overwritten):\n"
+                                         f"- {config_file_path}\n"
+                                         f"- {json_file_path}\n"
+                                         f"- {csv_file_path}")
                     self.status_var.set("Upload failed!")
             else:
                 messagebox.showinfo("Success", 
                                   f"Configuration generated successfully!\n\n"
                                   f"Profile: {profile_type.upper()}\n\n"
-                                  f"Files created:\n"
-                                  f"- {local_file_path}\n"
-                                  f"- {central_file_path}")
+                                  f"Files created (overwritten):\n"
+                                  f"- {config_file_path}\n"
+                                  f"- {json_file_path}\n"
+                                  f"- {csv_file_path}")
                 self.status_var.set("Configuration generated!")
                 
         except FileNotFoundError as e:

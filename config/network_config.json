@@ -1,60 +1,88 @@
 {
-    "aruba-sw": {
-        "network_address": "172.22.27.0",
-        "subnet_mask": "255.255.255.0",
-        "gateway": "172.22.27.254",
-        "hosts_range": [
-            "172.22.27.1",
-            "172.22.27.253"
-        ],
-        "data_vlan": {
-            "id": "100",
-            "name": "Data_VLAN"
-        },
-        "profiles": {
-            "av": {
-                "520": "10.9.45.0/24_AV_Crestron_AirMedia",
-                "530": "10.9.121.0/24_AV_Crestron_Ctrl",
-                "704": "128.41.5.0/24_UCLDesktop",
-                "707": "10.9.211.0/24_AV_Crestron_NVX",
-                "712": "10.10.20.0/26_AV_Lecturecast",
-                "807": "AV_Q-SYS_AVoIP",
-                "850": "10.0.127.32/29_Echo",
-                "909": "10.9.12.0/24_AV"
-            },
-            "standard": {
-                "915": "10.9.45.0/24_cctv",
-                "487": "10.9.121.0/24_487"
-            }
-        }
+  "aruba-sw": {
+    "network_address": "172.22.27.0",
+    "subnet_mask": "255.255.255.0",
+    "gateway": "172.22.27.254",
+    "hosts_range": [
+      "172.22.27.1",
+      "172.22.27.253"
+    ],
+    "data_vlan": {
+      "id": "100",
+      "name": "desktop@ucl"
     },
-    "aruba-tp": {
-        "network_address": "172.22.29.0",
-        "subnet_mask": "255.255.255.0",
-        "gateway": "172.22.29.254",
-        "hosts_range": [
-            "172.22.29.1",
-            "172.22.29.253"
-        ],
-        "data_vlan": {
-            "id": "200",
-            "name": "User_VLAN"
-        },
-        "profiles": {
-            "av": {
-                "520": "10.9.45.0/24_AV_Crestron_AirMedia",
-                "530": "10.9.121.0/24_AV_Crestron_Ctrl",
-                "704": "128.41.5.0/24_UCLDesktop",
-                "707": "10.9.211.0/24_AV_Crestron_NVX",
-                "712": "10.10.20.0/26_AV_Lecturecast",
-                "807": "AV_Q-SYS_AVoIP",
-                "850": "10.0.127.32/29_Echo",
-                "909": "10.9.12.0/24_AV"
-            },
-            "standard": {
-                "915": "10.9.45.0/24_cctv",
-                "487": "10.9.121.0/24_487"
-            }
-        }
+    "profiles": {
+      "av": {
+        "520": "10.9.45.0/24_AV_Crestron_Air",
+        "530": "10.9.121.0/24_AV_Crestron_Ctrl",
+        "704": "128.41.5.0/24_UCLDesktop",
+        "707": "10.9.211.0/24_AV_Crestron_NVX",
+        "712": "10.10.20.0/26_AV_Lecturecast",
+        "807": "AV_QSYS_AVoIP",
+        "850": "10.0.127.32/29_Echo",
+        "909": "10.9.12.0/24_AV"
+      },
+      "standard": {
+        "915": "10.9.45.0/24_IP_CCTV",
+        "487": "10.9.121.0/24_Cardax"
+      }
     }
+  },
+  "aruba-tp": {
+    "network_address": "172.22.29.0",
+    "subnet_mask": "255.255.255.0",
+    "gateway": "172.22.29.254",
+    "hosts_range": [
+      "172.22.29.1",
+      "172.22.29.253"
+    ],
+    "data_vlan": {
+      "id": "200",
+      "name": "desktop@ucl"
+    },
+    "profiles": {
+      "av": {
+        "520": "10.9.45.0/24_AV_Crestron_Air",
+        "530": "10.9.121.0/24_AV_Crestron_Ctrl",
+        "704": "128.41.5.0/24_UCLDesktop",
+        "707": "10.9.211.0/24_AV_Crestron_NVX",
+        "712": "10.10.20.0/26_AV_Lecturecast",
+        "807": "AV_QSYS_AVoIP",
+        "850": "10.0.127.32/29_Echo",
+        "909": "10.9.12.0/24_AV"
+      },
+      "standard": {
+        "915": "10.9.45.0/24_IP_CCTV",
+        "487": "10.9.121.0/24_Cardax"
+      }
+    }
+  },
+  "aruba-phys": {
+    "network_address": "172.22.20.0",
+    "subnet_mask": "255.255.255.0",
+    "gateway": "172.22.20.254",
+    "hosts_range": [
+      "172.22.20.1",
+      "172.22.20.253"
+    ],
+    "data_vlan": {
+      "id": "130",
+      "name": "desktop@ucl"
+    },
+    "profiles": {
+      "av": {
+        "520": "10.9.42.0/24_AV_Crestron_Air",
+        "530": "10.9.114.0/24_AV_Crestron_Ctrl",
+        "712": "10.10.19.64/26_AV_Lecturecast",
+        "715": "10.7.8.0/24_EFD_Space_Avail",
+        "850": "10.0.127.8/29_Echo",
+        "909": "10.9.9.0/24_AV"
+      },
+      "standard": {
+        "487": "Cardax",
+        "990": "10.100.9.0/24_990",
+        "915": "10.4.28.0/25_IP_CCTV"
+      }
+    }
+  }
 }
