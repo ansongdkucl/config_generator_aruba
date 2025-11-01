@@ -1,0 +1,7 @@
+# (paste the content above)
+.venv/
+venv/
+ENV/
+env/
+.venv*/
+gengerated_configs

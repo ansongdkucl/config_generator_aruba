@@ -60,7 +60,7 @@ interface 1/1/24-28
     description Switch-Uplink
     no shutdown
     vlan trunk native 1001
-    vlan trunk allowed 885, {{data_vlan_id}}
+    vlan trunk allowed {{trunk_allowed_vlans}}
 
 interface vlan 885
     description Switch-Management

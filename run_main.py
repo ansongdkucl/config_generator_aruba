@@ -490,6 +490,24 @@ class SwitchConfigGenerator:
         
         return vlan_config
     
+    def get_all_vlan_ids(self, data_vlan_id, management_ip, profile_type):
+        """Get all VLAN IDs including data VLAN and profile VLANs"""
+        vlan_ids = [data_vlan_id, "885", "1001"]  # Always include data VLAN, management VLAN, and blackhole VLAN
+        
+        # Add profile VLANs
+        profile_vlans = self.network_config.get_profile_vlans(management_ip, profile_type)
+        if profile_vlans:
+            vlan_ids.extend(profile_vlans.keys())
+        
+        # Remove duplicates and sort
+        vlan_ids = sorted(set(vlan_ids), key=int)
+        return vlan_ids
+    
+    def generate_trunk_allowed_vlans(self, data_vlan_id, management_ip, profile_type):
+        """Generate the trunk allowed VLANs string"""
+        all_vlan_ids = self.get_all_vlan_ids(data_vlan_id, management_ip, profile_type)
+        return ", ".join(all_vlan_ids)
+    
     def generate_aruba_central_json(self, hostname, management_ip, data_vlan_id, data_vlan_name, 
                                   location, gateway, mac_address, serial_number, profile_type):
         """Generate JSON file for Aruba Central"""
@@ -601,6 +619,9 @@ class SwitchConfigGenerator:
             # Generate profile VLAN configuration
             profile_vlan_config = self.generate_profile_vlan_config(management_ip, profile_type)
             
+            # Generate trunk allowed VLANs
+            trunk_allowed_vlans = self.generate_trunk_allowed_vlans(data_vlan_id, management_ip, profile_type)
+            
             # Replace variables in template
             config = template_content.replace("{{hostname}}", hostname)
             config = config.replace("{{management_ip}}", management_ip)
@@ -608,6 +629,7 @@ class SwitchConfigGenerator:
             config = config.replace("{{data_vlan_name}}", data_vlan_name)
             config = config.replace("{{snmp_location}}", location)
             config = config.replace("{{gateway}}", gateway)
+            config = config.replace("{{trunk_allowed_vlans}}",trunk_allowed_vlans)
             
             # Insert profile VLANs into the configuration
             # Find the position to insert VLANs (after existing VLAN definitions)

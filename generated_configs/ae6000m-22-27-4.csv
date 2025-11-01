@@ -1,0 +1,11 @@
+Variable,Value
+_sys_data_vlan_id,100
+_sys_data_vlan_name,desktop@ucl
+_sys_gateway,172.22.27.254
+_sys_hostname,ae6000m-22-27-4
+_sys_lan_mac,q
+_sys_location,default_location
+_sys_mgnt_ip,172.22.27.4
+_sys_serial,www
+_sys_915_vlan_name,10.9.45.0/24_IP_CCTV
+_sys_487_vlan_name,10.9.121.0/24_Cardax
