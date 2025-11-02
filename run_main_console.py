@@ -439,6 +439,16 @@ class SwitchConfigGenerator:
         con_entry.bind("<Return>", self.send_console_command)
         ttk.Button(console, text="Send", command=self.send_console_command).grid(row=2, column=5, sticky=tk.W, pady=(0, 6))
 
+        # Progress bar (below Send button)
+        progress_frame = ttk.Frame(console)
+        progress_frame.grid(row=3, column=0, columnspan=6, sticky="ew", pady=(4, 4))
+        ttk.Label(progress_frame, text="Transfer Progress:").pack(side=tk.LEFT, padx=(2, 8))
+        self.progress = ttk.Progressbar(progress_frame, length=300, mode='determinate', maximum=100)
+        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+
+
+
         # Status
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(main, textvariable=self.status_var, relief=tk.SUNKEN).grid(row=16, column=0, columnspan=3, sticky="ew")
@@ -500,7 +510,9 @@ class SwitchConfigGenerator:
             self.console_input_var.set("")
 
     def write_config_to_console(self):
-
+        """Send configuration to an Aruba CX console.
+        Always sends 'admin' login first, handles blank password setup,
+        enters config mode, and pushes the config with progress bar."""
         if not self.serial_console.is_connected:
             messagebox.showerror("Error", "Not connected to console")
             return
@@ -510,23 +522,101 @@ class SwitchConfigGenerator:
             messagebox.showerror("Error", "No hostname found. Please generate configuration first.")
             return
 
-        config_file_path = self.output_dir / f"{hostname}.cfg"
-        if not config_file_path.exists():
-            messagebox.showerror("Error", f"Configuration file not found: {config_file_path}")
+        cfg_path = self.output_dir / f"{hostname}.cfg"
+        if not cfg_path.exists():
+            messagebox.showerror("Error", f"Configuration file not found: {cfg_path}")
             return
 
+        ser = self.serial_console.serial_connection
+        if not ser:
+            messagebox.showerror("Error", "Serial connection unavailable.")
+            return
+
+        def read_console(timeout=1.0):
+            end = time.time() + timeout
+            buf = ""
+            while time.time() < end:
+                if ser.in_waiting:
+                    buf += ser.read(ser.in_waiting).decode("utf-8", errors="ignore")
+                time.sleep(0.1)
+            return buf.lower()
+
         try:
-            with open(config_file_path, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("!"):
-                        continue
-                    self.serial_console.send_command(line)
-                    time.sleep(0.08)
-            self.status_var.set("Configuration sent to console")
-            messagebox.showinfo("Success", f"Configuration {hostname}.cfg sent to console successfully!")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to send configuration: {e}")
+            self.progress["value"] = 0
+            self.status_var.set("Starting console login…")
+            self.root.update_idletasks()
+
+            # --- Stage 1: Force login sequence ---
+            # Always send 'admin' first, assume prompt is ready
+            self.serial_console.send_command("admin")
+            time.sleep(2.0)
+
+            # Handle password prompts and setup
+            for _ in range(40):
+                buf = read_console(0.8)
+                if not buf:
+                    continue
+                if "password:" in buf and "configure the 'admin'" not in buf:
+                    self.serial_console.send_command("")
+                    time.sleep(1.0)
+                elif "please configure the 'admin' user account password" in buf:
+                    self.serial_console.send_command("")
+                    time.sleep(1.0)
+                elif "enter new password" in buf:
+                    self.serial_console.send_command("")
+                    time.sleep(1.0)
+                elif "confirm new password" in buf:
+                    self.serial_console.send_command("")
+                    time.sleep(1.0)
+                elif "#" in buf:
+                    break
+                time.sleep(0.3)
+
+            # --- Stage 2: enter configuration mode ---
+            self.status_var.set("Entering configuration mode…")
+            self.serial_console.send_command("configure terminal")
+            time.sleep(1.5)
+
+            # --- Stage 3: send configuration lines ---
+            with open(cfg_path, "r") as f:
+                lines = [l.strip() for l in f if l.strip() and not l.startswith("!")]
+
+            total = len(lines)
+            self.progress["value"] = 0
+            self.progress["maximum"] = total
+            self.status_var.set(f"Sending configuration ({total} lines)…")
+            self.root.update_idletasks()
+
+            for i, line in enumerate(lines, start=1):
+                self.serial_console.send_command(line)
+                time.sleep(0.1)
+
+                incoming = read_console(0.3)
+                if any(x in incoming for x in ["[y/n]", "(y/n)", "do you want", "confirm", "overwrite existing"]):
+                    self.serial_console.send_command("y")
+                    time.sleep(0.4)
+
+                self.progress["value"] = i
+                if i % 5 == 0 or i == total:
+                    self.status_var.set(f"Sending line {i}/{total}…")
+                    self.root.update_idletasks()
+
+            # --- Stage 4: save ---
+            self.serial_console.send_command("end")
+            time.sleep(0.5)
+            self.serial_console.send_command("write memory")
+            time.sleep(1.0)
+
+            self.progress["value"] = total
+            self.status_var.set("Configuration complete.")
+            self.root.update_idletasks()
+            messagebox.showinfo("Success", f"Configuration '{hostname}.cfg' sent successfully!")
+
+        except Exception as err:
+            self.status_var.set("Error during config send.")
+            messagebox.showerror("Error", f"Failed to send configuration:\n{err}")
+
+
 
 
     # -------- SFTP ---------
