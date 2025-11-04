@@ -9,8 +9,8 @@ ntp server 193.60.251.3
 ntp enable
 !
 !
-tacacs-server host 10.28.50.99 key ciphertext Goaheadpunk!
-tacacs-server host 10.36.50.99 key ciphertext Goaheadpunk!
+tacacs-server host 10.28.50.99 key plaintext Goaheadpunk!
+tacacs-server host 10.36.50.99 key plaintext Goaheadpunk!
 !
 aaa authentication login console group tacacs local
 aaa authentication login ssh group tacacs local

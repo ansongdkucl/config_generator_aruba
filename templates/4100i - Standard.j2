@@ -9,8 +9,8 @@ ntp server 193.60.251.3
 ntp enable
 !
 !
-tacacs-server host 10.28.50.99 key ciphertext Goaheadpunk!
-tacacs-server host 10.36.50.99 key ciphertext Goaheadpunk!
+tacacs-server host 10.28.50.99 key plaintext Goaheadpunk!
+tacacs-server host 10.36.50.99 key plaintext Goaheadpunk!
 !
 aaa authentication login console group tacacs local
 aaa authentication login ssh group tacacs local
@@ -53,10 +53,10 @@ interface 1/1/1-1/1/23
     loop-protect
     port-access port-security
         enable
-	client-limit 50	
+	client-limit 32
 
 !
-interface 1/1/24-28
+interface 1/1/24-1/1/28
     description Switch-Uplink
     no shutdown
     vlan trunk native 1001
