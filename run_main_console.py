@@ -150,16 +150,24 @@ class NetworkConfig:
         except Exception:
             return DEFAULT_VLAN_ID, DEFAULT_VLAN_NAME
 
-    def generate_hostname(self, management_ip, template_type, profile_type="standard"):
+    def generate_hostname(self, management_ip, template_type):
         try:
             octets = str(ipaddress.IPv4Address(management_ip)).split(".")
-            if profile_type == "standard":
+            # Decide prefix from template name
+            if "6300" in template_type.lower():
                 prefix = "ae6000m"
             else:
                 prefix = "ae4100i"
             return f"{prefix}-{octets[1]}-{octets[2]}-{octets[3]}"
         except Exception:
-            return DEFAULT_HOSTNAME
+            return "default_host"
+
+    def detect_profile_type(self, template_type):
+        """Return 'standard' or 'av' based on template name."""
+        if "audio" in template_type.lower() or "visual" in template_type.lower() or "av" in template_type.lower():
+            return "av"
+        return "standard"
+
 
 
 # -----------------------------
@@ -331,6 +339,7 @@ class SwitchConfigGenerator:
 
     # -------- UI ---------
     def create_widgets(self):
+        
         main = ttk.Frame(self.root, padding="10")
         main.grid(row=0, column=0, sticky="nsew")
 
@@ -340,18 +349,24 @@ class SwitchConfigGenerator:
         # Template
         ttk.Label(main, text="Switch Template:").grid(row=1, column=0, sticky=tk.W)
         self.template_var = tk.StringVar()
-        templates = self.template_manager.get_available_templates() or ["aruba-4100", "aruba-6300"]
-        template_combo = ttk.Combobox(main, textvariable=self.template_var, values=templates, state="readonly")
+        templates = [
+            "4100i - Standard",
+            "4100i - Audio Visual",
+            "6300m - Standard",
+            "6300m - Audio Visual"
+        ]
+
+        template_combo = ttk.Combobox(
+            main,
+            textvariable=self.template_var,
+            values=templates,
+            state="readonly"
+        )
         template_combo.grid(row=1, column=1, sticky="ew", pady=5)
         self.template_var.set(templates[0])
 
-        # Profile (Radiobuttons to avoid dual-check issue)
-        ttk.Label(main, text="Profile:").grid(row=2, column=0, sticky=tk.W)
-        self.profile_var = tk.StringVar(value="standard")
-        pr_frame = ttk.Frame(main)
-        pr_frame.grid(row=2, column=1, sticky=tk.W, pady=5)
-        ttk.Radiobutton(pr_frame, text="Standard", variable=self.profile_var, value="standard").pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Radiobutton(pr_frame, text="AV", variable=self.profile_var, value="av").pack(side=tk.LEFT)
+        # 🔹 When user changes template, auto-update hostname/VLAN
+        template_combo.bind("<<ComboboxSelected>>", self.on_template_change)
 
         # Management IP (required)
         ttk.Label(main, text="Management IP *:").grid(row=3, column=0, sticky=tk.W)
@@ -359,6 +374,9 @@ class SwitchConfigGenerator:
         mgmt_entry = ttk.Entry(main, textvariable=self.management_ip_var)
         mgmt_entry.grid(row=3, column=1, sticky="ew", pady=5)
         mgmt_entry.bind("<FocusOut>", self.auto_fill_fields)
+
+        mgmt_entry.bind("<FocusOut>", lambda e: self.auto_fill_all_fields())
+        template_combo.bind("<<ComboboxSelected>>", lambda e: self.auto_fill_all_fields())
 
         # Hostname
         ttk.Label(main, text="Hostname:").grid(row=4, column=0, sticky=tk.W)
@@ -633,6 +651,34 @@ class SwitchConfigGenerator:
             self.upload_var.set(False)
             messagebox.showwarning("SFTP", "SFTP configuration cancelled")
 
+
+
+    def on_template_change(self, event=None):
+        """Triggered when the template dropdown changes.
+        Auto-fills hostname and data VLAN info."""
+        mgmt_ip = self.management_ip_var.get().strip()
+        if not mgmt_ip:
+            # no IP yet → skip
+            return
+
+        try:
+            template_type = self.template_var.get()
+            profile_type = self.network_config.detect_profile_type(template_type)
+
+            # Auto-generate hostname
+            hostname = self.network_config.generate_hostname(mgmt_ip, template_type)
+            self.hostname_var.set(hostname)
+
+            # Auto-fill VLAN info
+            vid, vname = self.network_config.get_data_vlan_info(mgmt_ip)
+            self.data_vlan_id_var.set(vid)
+            self.data_vlan_name_var.set(vname)
+
+            self.status_var.set(f"Updated hostname and VLAN info for {template_type}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Auto-fill failed: {e}")
+
+
     # -------- Generation helpers ---------
     def auto_fill_fields(self, event=None):
     
@@ -647,7 +693,8 @@ class SwitchConfigGenerator:
 
         try:
             template_type = self.template_var.get()
-            profile_type = self.profile_var.get()
+            profile_type = self.network_config.detect_profile_type(self.template_var.get())
+
 
             # Auto-generate hostname based on both IP + profile type
             hostname = self.network_config.generate_hostname(mgmt_ip, template_type, profile_type)
@@ -730,6 +777,38 @@ class SwitchConfigGenerator:
         except Exception as e:
             print(f"CSV save error: {e}")
 
+
+    def auto_fill_all_fields(self):
+        """Auto-fills hostname and VLAN info based on Management IP and selected template."""
+        mgmt_ip = self.management_ip_var.get().strip()
+        if not mgmt_ip:
+            self.status_var.set("Enter a management IP to auto-fill fields.")
+            return
+
+        try:
+            ipaddress.IPv4Address(mgmt_ip)
+        except ipaddress.AddressValueError:
+            self.status_var.set("Invalid IP address format.")
+            return
+
+        try:
+            template_type = self.template_var.get()
+            profile_type = self.network_config.detect_profile_type(template_type)
+
+            # 🔹 Hostname generation
+            hostname = self.network_config.generate_hostname(mgmt_ip, template_type)
+            self.hostname_var.set(hostname)
+
+            # 🔹 Data VLAN auto-fill
+            vid, vname = self.network_config.get_data_vlan_info(mgmt_ip)
+            self.data_vlan_id_var.set(vid)
+            self.data_vlan_name_var.set(vname)
+
+            self.status_var.set(f"Auto-filled hostname ({hostname}) and VLAN ({vid}) for {template_type}")
+        except Exception as e:
+            self.status_var.set(f"Auto-fill error: {e}")
+
+
     # -------- Generate config ---------
     def generate_config(self):
         # required fields
@@ -741,9 +820,7 @@ class SwitchConfigGenerator:
         except ipaddress.AddressValueError:
             messagebox.showerror("Error", "Invalid Management IP address")
             return
-        if not self.profile_var.get():
-            messagebox.showerror("Error", "Please select a profile (Standard or AV)")
-            return
+     
 
         # Ensure SFTP cred if requested
         if self.upload_var.get() and not self.sftp_uploader.authenticated:
@@ -772,7 +849,8 @@ class SwitchConfigGenerator:
         mac_address = self.mac_address_var.get().strip()
         serial_number = self.serial_number_var.get().strip()
         management_ip = self.management_ip_var.get().strip()
-        profile_type = self.profile_var.get()
+        profile_type = self.network_config.detect_profile_type(self.template_var.get())
+
 
         # Profile VLAN block & trunk list
         profile_vlan_cfg = self.generate_profile_vlan_config(management_ip, profile_type)
@@ -856,7 +934,6 @@ class SwitchConfigGenerator:
         self.data_vlan_name_var.set("")
         self.mac_address_var.set("")
         self.serial_number_var.set("")
-        self.profile_var.set("standard")
         self.output_text.delete("1.0", tk.END)
         self.console_text.delete("1.0", tk.END)
         self.status_var.set("Ready")

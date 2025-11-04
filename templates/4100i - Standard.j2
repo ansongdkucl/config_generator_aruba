@@ -1,4 +1,4 @@
-hostname ae6000m-22-27-6
+hostname {{hostname}}
 !
 !
 !
@@ -9,15 +9,14 @@ ntp server 193.60.251.3
 ntp enable
 !
 !
-tacacs-server host 10.28.50.99 key ciphertext goaheadpunk!
-tacacs-server host 10.36.50.99 key ciphertext goaheadpunk!
+tacacs-server host 10.28.50.99 key ciphertext Goaheadpunk!
+tacacs-server host 10.36.50.99 key ciphertext Goaheadpunk!
 !
 aaa authentication login console group tacacs local
 aaa authentication login ssh group tacacs local
 aaa authorization commands console group local
 aaa authorization commands ssh group tacacs local
 aaa accounting all-mgmt console start-stop group tacacs local
-aaa accounting all-mgmt ssh start-stop group tacacs local
 !
 ssh server vrf default
 access-list ip 23SNMP
@@ -35,16 +34,10 @@ logging 10.36.12.1 severity notice
 logging 10.36.50.60 severity notice
 !
 !
-vlan 100
-       desktop@ucl
+vlan {{data_vlan_id}}
+   name {{data_vlan_name}}
 !
-vlan 915
-   name 10.9.45.0/24_IP_CCTV
-!
-vlan 487
-   name 10.9.121.0/24_Cardax
-!
-
+{{profile_vlans}}
 vlan 885
    name Switch-Management
 !
@@ -52,27 +45,30 @@ vlan 885
 vlan 1001
     name Blackhole
 
-interface 1/1/1
+interface 1/1/1-1/1/23
     no shutdown
-    vlan access 100
+    vlan access {{data_vlan_id}}
     spanning-tree bpdu-guard
     spanning-tree port-type admin-edge
     loop-protect
     port-access port-security
         enable
 	client-limit 50	
+
 !
-interface 1/1/49-52
+interface 1/1/24-28
     description Switch-Uplink
     no shutdown
     vlan trunk native 1001
-    vlan trunk allowed 885, 100
+    vlan trunk allowed {{trunk_allowed_vlans}}
 
 interface vlan 885
     description Switch-Management
-    ip address 172.22.27.6/24
+    ip address {{management_ip}}/24
 
-snmp-server system-location default_location
-ip route 0.0.0.0/0 172.22.27.254
+snmp-server community blooming
+
+snmp-server system-location {{snmp_location}}
+ip route 0.0.0.0/0 {{gateway}}
 ip dns server-address 144.82.250.1
 ip dns server-address 193.60.250.1

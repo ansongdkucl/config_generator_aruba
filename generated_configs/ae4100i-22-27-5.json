@@ -1,0 +1,20 @@
+{
+  "ss": {
+    "_sys_data_vlan_id": "100",
+    "_sys_data_vlan_name": "desktop@ucl",
+    "_sys_gateway": "172.22.27.254",
+    "_sys_hostname": "ae4100i-22-27-5",
+    "_sys_lan_mac": "sss",
+    "_sys_location": "default_location",
+    "_sys_mgnt_ip": "172.22.27.5",
+    "_sys_serial": "ss",
+    "_sys_520_vlan_name": "10.9.45.0/24_AV_Crestron_Air",
+    "_sys_530_vlan_name": "10.9.121.0/24_AV_Crestron_Ctrl",
+    "_sys_704_vlan_name": "128.41.5.0/24_UCLDesktop",
+    "_sys_707_vlan_name": "10.9.211.0/24_AV_Crestron_NVX",
+    "_sys_712_vlan_name": "10.10.20.0/26_AV_Lecturecast",
+    "_sys_807_vlan_name": "AV_QSYS_AVoIP",
+    "_sys_850_vlan_name": "10.0.127.32/29_Echo",
+    "_sys_909_vlan_name": "10.9.12.0/24_AV"
+  }
+}

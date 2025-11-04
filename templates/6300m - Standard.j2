@@ -1,4 +1,4 @@
-hostname ae6000m-22-20-5
+hostname {{hostname}}
 !
 !
 !
@@ -35,41 +35,18 @@ logging 10.36.12.1 severity notice
 logging 10.36.50.60 severity notice
 !
 !
-vlan 130
-       desktop@ucl
+vlan {{data_vlan_id}}
+       {{data_vlan_name}}
 !
-vlan 520
-   name 10.9.42.0/24_AV_Crestron_Air
-!
-vlan 530
-   name 10.9.114.0/24_AV_Crestron_Ctrl
-!
-vlan 712
-   name 10.10.19.64/26_AV_Lecturecast
-!
-vlan 707
-   name 10.9.208.0/24_AV_Crestron_NVX
-!
-vlan 807
-   name AV_QSYS_AVoIP
-!
-vlan 850
-   name 10.0.127.8/29_Echo
-!
-vlan 909
-   name 10.9.9.0/24_AV
-!
-
 vlan 885
    name Switch-Management
-!
 !
 vlan 1001
     name Blackhole
 
 interface 1/1/1
     no shutdown
-    vlan access 130
+    vlan access {{data_vlan_id}}
     spanning-tree bpdu-guard
     spanning-tree port-type admin-edge
     loop-protect
@@ -81,15 +58,15 @@ interface 1/1/49-52
     description Switch-Uplink
     no shutdown
     vlan trunk native 1001
-    vlan trunk allowed 130,520,530,707,712,807,850,885,909,1001
+    vlan trunk allowed {{trunk_allowed_vlans}}
 
 interface vlan 885
     description Switch-Management
-    ip address 172.22.20.5/24
+    ip address {{management_ip}}/24
 
 snmp-server community blooming
 
-snmp-server system-location default_location
-ip route 0.0.0.0/0 172.22.20.254
+snmp-server system-location {{snmp_location}}
+ip route 0.0.0.0/0 {{gateway}}
 ip dns server-address 144.82.250.1
 ip dns server-address 193.60.250.1
