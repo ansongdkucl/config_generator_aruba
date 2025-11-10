@@ -339,15 +339,16 @@ class SwitchConfigGenerator:
 
     # -------- UI ---------
     def create_widgets(self):
-        
-        main = ttk.Frame(self.root, padding="10")
+        main = ttk.Frame(self.root, padding="14")
         main.grid(row=0, column=0, sticky="nsew")
 
-        title = ttk.Label(main, text="Aruba Switch Configuration Generator", font=("Arial", 16, "bold"))
-        title.grid(row=0, column=0, columnspan=3, pady=(0, 20))
+        # Title
+        title = ttk.Label(main, text="Aruba Switch Configuration Generator",
+                        font=("Segoe UI", 16, "bold"))
+        title.grid(row=0, column=0, columnspan=4, pady=(0, 15))
 
-        # Template
-        ttk.Label(main, text="Switch Template:").grid(row=1, column=0, sticky=tk.W)
+        # ---------- 1️⃣ Switch Template | Serial Number ----------
+        ttk.Label(main, text="Switch Template:").grid(row=1, column=0, sticky="e", padx=5, pady=4)
         self.template_var = tk.StringVar()
         templates = [
             "4100i - Standard",
@@ -355,129 +356,125 @@ class SwitchConfigGenerator:
             "6300m - Standard",
             "6300m - Audio Visual"
         ]
-
-        template_combo = ttk.Combobox(
-            main,
-            textvariable=self.template_var,
-            values=templates,
-            state="readonly"
-        )
-        template_combo.grid(row=1, column=1, sticky="ew", pady=5)
+        self.template_combo = ttk.Combobox(main, textvariable=self.template_var,
+                                        values=templates, state="readonly", width=35)
+        self.template_combo.grid(row=1, column=1, sticky="ew", padx=5, pady=4)
         self.template_var.set(templates[0])
 
-        # 🔹 When user changes template, auto-update hostname/VLAN
-        template_combo.bind("<<ComboboxSelected>>", self.on_template_change)
-
-        # Management IP (required)
-        ttk.Label(main, text="Management IP *:").grid(row=3, column=0, sticky=tk.W)
-        self.management_ip_var = tk.StringVar()
-        mgmt_entry = ttk.Entry(main, textvariable=self.management_ip_var)
-        mgmt_entry.grid(row=3, column=1, sticky="ew", pady=5)
-        mgmt_entry.bind("<FocusOut>", self.auto_fill_fields)
-
-        mgmt_entry.bind("<FocusOut>", lambda e: self.auto_fill_all_fields())
-        template_combo.bind("<<ComboboxSelected>>", lambda e: self.auto_fill_all_fields())
-
-        # Hostname
-        ttk.Label(main, text="Hostname:").grid(row=4, column=0, sticky=tk.W)
-        self.hostname_var = tk.StringVar()
-        ttk.Entry(main, textvariable=self.hostname_var).grid(row=4, column=1, sticky="ew", pady=5)
-
-        # Location
-        ttk.Label(main, text="Location:").grid(row=5, column=0, sticky=tk.W)
-        self.location_var = tk.StringVar(value=DEFAULT_LOCATION)
-        ttk.Entry(main, textvariable=self.location_var).grid(row=5, column=1, sticky="ew", pady=5)
-
-        # Data VLAN ID/Name
-        ttk.Label(main, text="Data VLAN ID:").grid(row=6, column=0, sticky=tk.W)
-        self.data_vlan_id_var = tk.StringVar()
-        ttk.Entry(main, textvariable=self.data_vlan_id_var).grid(row=6, column=1, sticky="ew", pady=5)
-
-        ttk.Label(main, text="Data VLAN Name:").grid(row=7, column=0, sticky=tk.W)
-        self.data_vlan_name_var = tk.StringVar()
-        ttk.Entry(main, textvariable=self.data_vlan_name_var).grid(row=7, column=1, sticky="ew", pady=5)
-
-        # MAC & Serial (required)
-        ttk.Label(main, text="MAC Address *:").grid(row=8, column=0, sticky=tk.W)
-        self.mac_address_var = tk.StringVar()
-        ttk.Entry(main, textvariable=self.mac_address_var).grid(row=8, column=1, sticky="ew", pady=5)
-
-        ttk.Label(main, text="Serial Number *:").grid(row=9, column=0, sticky=tk.W)
+        ttk.Label(main, text="Serial Number *:").grid(row=1, column=2, sticky="e", padx=5, pady=4)
         self.serial_number_var = tk.StringVar()
-        ttk.Entry(main, textvariable=self.serial_number_var).grid(row=9, column=1, sticky="ew", pady=5)
+        self.serial_entry = ttk.Entry(main, textvariable=self.serial_number_var, width=35)
+        self.serial_entry.grid(row=1, column=3, sticky="ew", padx=5, pady=4)
 
-        # Upload toggle
+        # ---------- 2️⃣ Management IP | Hostname ----------
+        ttk.Label(main, text="Management IP *:").grid(row=2, column=0, sticky="e", padx=5, pady=4)
+        self.management_ip_var = tk.StringVar()
+        mgmt_entry = ttk.Entry(main, textvariable=self.management_ip_var, width=35)
+        mgmt_entry.grid(row=2, column=1, sticky="ew", padx=5, pady=4)
+
+        ttk.Label(main, text="Hostname:").grid(row=2, column=2, sticky="e", padx=5, pady=4)
+        self.hostname_var = tk.StringVar()
+        self.hostname_entry = ttk.Entry(main, textvariable=self.hostname_var, width=35)
+        self.hostname_entry.grid(row=2, column=3, sticky="ew", padx=5, pady=4)
+
+        # ---------- 3️⃣ Data VLAN ----------
+        ttk.Label(main, text="Data VLAN ID:").grid(row=3, column=0, sticky="e", padx=5, pady=4)
+        self.data_vlan_id_var = tk.StringVar()
+        self.data_vlan_id_entry = ttk.Entry(main, textvariable=self.data_vlan_id_var, width=35)
+        self.data_vlan_id_entry.grid(row=3, column=1, sticky="ew", padx=5, pady=4)
+
+        ttk.Label(main, text="Data VLAN Name:").grid(row=3, column=2, sticky="e", padx=5, pady=4)
+        self.data_vlan_name_var = tk.StringVar()
+        self.data_vlan_name_entry = ttk.Entry(main, textvariable=self.data_vlan_name_var, width=35)
+        self.data_vlan_name_entry.grid(row=3, column=3, sticky="ew", padx=5, pady=4)
+
+        # ---------- 4️⃣ Location | MAC Address ----------
+        ttk.Label(main, text="Location:").grid(row=4, column=0, sticky="e", padx=5, pady=4)
+        self.location_var = tk.StringVar(value=DEFAULT_LOCATION)
+        self.location_entry = ttk.Entry(main, textvariable=self.location_var, width=35)
+        self.location_entry.grid(row=4, column=1, sticky="ew", padx=5, pady=4)
+
+        ttk.Label(main, text="MAC Address *:").grid(row=4, column=2, sticky="e", padx=5, pady=4)
+        self.mac_address_var = tk.StringVar()
+        self.mac_entry = ttk.Entry(main, textvariable=self.mac_address_var, width=35)
+        self.mac_entry.grid(row=4, column=3, sticky="ew", padx=5, pady=4)
+
+        # ---------- Upload Checkbox ----------
         self.upload_var = tk.BooleanVar()
-        ttk.Checkbutton(main, text="Upload to SFTP server", variable=self.upload_var, command=self.on_upload_toggle).grid(row=10, column=0, columnspan=2, pady=8, sticky=tk.W)
+        ttk.Checkbutton(main, text="Upload to SFTP server", variable=self.upload_var,
+                        command=self.on_upload_toggle).grid(row=5, column=0, columnspan=2,
+                                                            sticky="w", padx=5, pady=(10, 8))
 
-        # Buttons
-        btns = ttk.Frame(main)
-        btns.grid(row=11, column=0, columnspan=3, pady=10)
-        ttk.Button(btns, text="Generate Configuration", command=self.generate_config).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btns, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btns, text="Exit", command=self.root.quit).pack(side=tk.LEFT, padx=5)
+        # ---------- Buttons ----------
+        btn_frame = ttk.Frame(main)
+        btn_frame.grid(row=6, column=0, columnspan=4, pady=8)
+        ttk.Button(btn_frame, text="Generate Configuration", command=self.generate_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Exit", command=self.root.quit).pack(side=tk.LEFT, padx=5)
 
-        # Required note
-        ttk.Label(main, text="* Required fields", font=("Arial", 9, "italic"), foreground="red").grid(row=12, column=0, columnspan=2, pady=(5, 0), sticky=tk.W)
+        ttk.Label(main, text="* Required fields", font=("Segoe UI", 9, "italic"),
+                foreground="red").grid(row=7, column=0, columnspan=4, sticky="w", padx=5)
 
-        # Output box
-        ttk.Label(main, text="Output:").grid(row=13, column=0, sticky=tk.W, pady=(18, 5))
-        self.output_text = tk.Text(main, height=12, width=90)
-        self.output_text.grid(row=14, column=0, columnspan=3, sticky="nsew")
-        out_scroll = ttk.Scrollbar(main, orient=tk.VERTICAL, command=self.output_text.yview)
-        out_scroll.grid(row=14, column=3, sticky="ns")
-        self.output_text.configure(yscrollcommand=out_scroll.set)
+        # ---------- Output Box ----------
+        ttk.Label(main, text="Output:").grid(row=8, column=0, sticky="w", padx=5, pady=(14, 5))
+        self.output_text = tk.Text(main, height=10, width=100)
+        self.output_text.grid(row=9, column=0, columnspan=4, sticky="nsew", padx=5)
+        scroll = ttk.Scrollbar(main, orient="vertical", command=self.output_text.yview)
+        scroll.grid(row=9, column=4, sticky="ns")
+        self.output_text.configure(yscrollcommand=scroll.set)
 
-        # Console section (under output)
-        console = ttk.LabelFrame(main, text="Console Connection", padding=5)
-        console.grid(row=15, column=0, columnspan=3, sticky="nsew", pady=(18, 5))
-
-        ttk.Label(console, text="COM Port:").grid(row=0, column=0, sticky=tk.W)
+        # ---------- Console ----------
+        console = ttk.LabelFrame(main, text="Console Connection", padding=8)
+        console.grid(row=10, column=0, columnspan=4, sticky="nsew", pady=(14, 5))
+        ttk.Label(console, text="COM Port:").grid(row=0, column=0, sticky="w")
         self.com_port_var = tk.StringVar()
-        self.com_port_combo = ttk.Combobox(console, textvariable=self.com_port_var, width=14, state="readonly")
-        self.com_port_combo.grid(row=0, column=1, sticky=tk.W, padx=(4, 6))
-
-        ttk.Button(console, text="Refresh Ports", command=self.refresh_com_ports).grid(row=0, column=2, sticky=tk.W)
+        self.com_port_combo = ttk.Combobox(console, textvariable=self.com_port_var, width=18, state="readonly")
+        self.com_port_combo.grid(row=0, column=1, padx=4)
+        ttk.Button(console, text="Refresh Ports", command=self.refresh_com_ports).grid(row=0, column=2, padx=4)
         self.connect_button = ttk.Button(console, text="Connect", command=self.connect_console)
         self.connect_button.grid(row=0, column=3, padx=4)
         self.disconnect_button = ttk.Button(console, text="Disconnect", command=self.disconnect_console, state=tk.DISABLED)
         self.disconnect_button.grid(row=0, column=4, padx=4)
-        self.write_config_button = ttk.Button(console, text="Write Config to Console", command=self.write_config_to_console, state=tk.DISABLED)
+        self.write_config_button = ttk.Button(console, text="Write Config to Console",
+                                            command=self.write_config_to_console, state=tk.DISABLED)
         self.write_config_button.grid(row=0, column=5, padx=4)
 
-        self.console_text = tk.Text(console, height=10, width=90, bg="black", fg="white")
-        self.console_text.grid(row=1, column=0, columnspan=6, sticky="nsew", pady=(6, 6))
-        con_scroll = ttk.Scrollbar(console, orient=tk.VERTICAL, command=self.console_text.yview)
-        con_scroll.grid(row=1, column=6, sticky="ns")
-        self.console_text.configure(yscrollcommand=con_scroll.set)
+        # Console area (enlarged 25%)
+        self.console_text = tk.Text(console, height=15, width=100, bg="black", fg="white")
+        self.console_text.grid(row=1, column=0, columnspan=6, sticky="nsew", pady=(8, 6))
+        cscroll = ttk.Scrollbar(console, orient="vertical", command=self.console_text.yview)
+        cscroll.grid(row=1, column=6, sticky="ns")
+        self.console_text.configure(yscrollcommand=cscroll.set)
 
+        # Command input
         self.console_input_var = tk.StringVar()
-        con_entry = ttk.Entry(console, textvariable=self.console_input_var)
-        con_entry.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(0, 6))
-        con_entry.bind("<Return>", self.send_console_command)
-        ttk.Button(console, text="Send", command=self.send_console_command).grid(row=2, column=5, sticky=tk.W, pady=(0, 6))
+        cinput = ttk.Entry(console, textvariable=self.console_input_var)
+        cinput.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(4, 6))
+        cinput.bind("<Return>", self.send_console_command)
+        ttk.Button(console, text="Send", command=self.send_console_command).grid(row=2, column=5, sticky="w")
 
-        # Progress bar (below Send button)
-        progress_frame = ttk.Frame(console)
-        progress_frame.grid(row=3, column=0, columnspan=6, sticky="ew", pady=(4, 4))
-        ttk.Label(progress_frame, text="Transfer Progress:").pack(side=tk.LEFT, padx=(2, 8))
-        self.progress = ttk.Progressbar(progress_frame, length=300, mode='determinate', maximum=100)
+        # Progress bar
+        progress = ttk.Frame(console)
+        progress.grid(row=3, column=0, columnspan=6, sticky="ew", pady=(6, 2))
+        ttk.Label(progress, text="Transfer Progress:").pack(side=tk.LEFT, padx=(4, 8))
+        self.progress = ttk.Progressbar(progress, length=400, mode="determinate", maximum=100)
         self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-
-
-
-        # Status
+        # ---------- Status ----------
         self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(main, textvariable=self.status_var, relief=tk.SUNKEN).grid(row=16, column=0, columnspan=3, sticky="ew")
+        ttk.Label(main, textvariable=self.status_var, relief="sunken").grid(row=11, column=0, columnspan=4, sticky="ew", pady=(6, 0))
 
-        # Grid weights
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main.columnconfigure(1, weight=1)
-        main.rowconfigure(14, weight=1)
+        # Layout weights
+        for i in range(4):
+            main.columnconfigure(i, weight=1)
+        main.rowconfigure(9, weight=1)
         console.columnconfigure(0, weight=1)
         console.rowconfigure(1, weight=1)
+
+        # Bind auto-fill
+        mgmt_entry.bind("<FocusOut>", lambda e: self.auto_fill_all_fields())
+        self.template_combo.bind("<<ComboboxSelected>>", lambda e: self.auto_fill_all_fields())
+
 
     # -------- Console logic ---------
     def refresh_com_ports(self):
@@ -821,7 +818,6 @@ class SwitchConfigGenerator:
             messagebox.showerror("Error", "Invalid Management IP address")
             return
      
-
         # Ensure SFTP cred if requested
         if self.upload_var.get() and not self.sftp_uploader.authenticated:
             if messagebox.askyesno("SFTP Not Configured", "SFTP is not configured. Configure now?"):
@@ -829,6 +825,13 @@ class SwitchConfigGenerator:
             if not self.sftp_uploader.authenticated:
                 self.upload_var.set(False)
                 messagebox.showwarning("SFTP", "Upload cancelled. Will save locally only.")
+
+        # 🔹 Clean folder before generating new files
+        for f in self.output_dir.glob("*.*"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
 
         self.status_var.set("Loading template...")
         self.root.update_idletasks()
@@ -850,7 +853,6 @@ class SwitchConfigGenerator:
         serial_number = self.serial_number_var.get().strip()
         management_ip = self.management_ip_var.get().strip()
         profile_type = self.network_config.detect_profile_type(self.template_var.get())
-
 
         # Profile VLAN block & trunk list
         profile_vlan_cfg = self.generate_profile_vlan_config(management_ip, profile_type)
@@ -878,7 +880,6 @@ class SwitchConfigGenerator:
                 marker = f"vlan {data_vlan_id}"
                 idx = config.find(marker)
                 if idx != -1:
-                    # find end of that block by next '!' after marker
                     end_idx = config.find("\n!", idx)
                     if end_idx == -1:
                         end_idx = idx + len(marker)
@@ -887,26 +888,40 @@ class SwitchConfigGenerator:
                 else:
                     config += "\n" + profile_vlan_cfg
 
-        # Save outputs
+        # --- Save outputs ---
         cfg_filename = f"{hostname}.cfg"
         json_filename = f"{hostname}.json"
         csv_filename = f"{hostname}.csv"
+        api_json_filename = f"api-{hostname}.json"
 
         cfg_path = self.output_dir / cfg_filename
+        json_path = self.output_dir / json_filename
+        csv_path = self.output_dir / csv_filename
+        api_json_path = self.output_dir / api_json_filename
+
+        # Save main config
         with open(cfg_path, "w") as f:
             f.write(config)
 
-        # Central JSON + CSV
+        # Save Aruba Central JSON + CSV
         central = self.generate_aruba_central_json(
-        hostname, management_ip, data_vlan_id, data_vlan_name, location, gateway, mac_address, serial_number, profile_type
+            hostname, management_ip, data_vlan_id, data_vlan_name,
+            location, gateway, mac_address, serial_number, profile_type
         )
-        json_path = self.output_dir / json_filename
         with open(json_path, "w") as jf:
             json.dump(central, jf, indent=2)
-        csv_path = self.output_dir / csv_filename
         self.save_csv_file(central, csv_path)
 
-        # Optional upload
+        # Save API upload JSON (for Central REST endpoint)
+        device_data = list(central.values())[0]  # get the dict for this device
+        api_payload = {
+            "total": len(device_data),
+            "variables": device_data
+        }
+        with open(api_json_path, "w") as af:
+            json.dump(api_payload, af, indent=2)
+
+        # Optional upload via SFTP
         upload_msg = ""
         if self.upload_var.get():
             remote_name = safe_mac_filename(mac_address)
@@ -915,15 +930,17 @@ class SwitchConfigGenerator:
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Show in GUI
+        # Show summary in GUI
         self.output_text.delete("1.0", tk.END)
         self.output_text.insert(tk.END, f"Generated at {timestamp}\n")
         self.output_text.insert(tk.END, f"Saved config: {cfg_path}\n")
         self.output_text.insert(tk.END, f"Saved Central JSON: {json_path}\n")
-        self.output_text.insert(tk.END, f"Saved Central CSV: {csv_path}{upload_msg}\n\n")
+        self.output_text.insert(tk.END, f"Saved Central CSV: {csv_path}\n")
+        self.output_text.insert(tk.END, f"Saved API JSON: {api_json_path}{upload_msg}\n\n")
         self.output_text.insert(tk.END, config)
         self.output_text.see(tk.END)
         self.status_var.set("Generated configuration.")
+
 
     # -------- misc ---------
     def clear_all(self):

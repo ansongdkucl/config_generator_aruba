@@ -4,4 +4,4 @@ venv/
 ENV/
 env/
 .venv*/
-gengerated_configs
+generated_configs
