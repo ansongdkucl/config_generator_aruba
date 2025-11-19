@@ -36,7 +36,10 @@ logging 10.36.50.60 severity notice
 !
 !
 vlan {{data_vlan_id}}
-       {{data_vlan_name}}
+   name {{data_vlan_name}}
+!
+vlan {{voice_vlan_id}}
+   name {{voice_vlan_name}}
 !
 vlan 885
    name Switch-Management
@@ -55,7 +58,7 @@ interface 1/1/1
         enable
 	client-limit 50	
 !
-interface 1/1/49-52
+interface 1/1/48-52
     description Switch-Uplink
     no shutdown
     vlan trunk native 1001
