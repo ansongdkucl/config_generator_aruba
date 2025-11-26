@@ -35,12 +35,30 @@ logging 10.36.12.1 severity notice
 logging 10.36.50.60 severity notice
 !
 !
-vlan {{data_vlan_id}}
-   name {{data_vlan_name}}
+{# ============================= #}
+{# DATA VLAN                     #}
+{# ============================= #}
+vlan {{data_vlan.id}}
+   name {{data_vlan.name}}
 !
-vlan {{voice_vlan_id}}
-   name {{voice_vlan_name}}
+
+{# ============================= #}
+{# VOICE VLAN (OPTIONAL)         #}
+{# ============================= #}
+{% if voice_vlan %}
+vlan {{voice_vlan.id}}
+   name {{voice_vlan.name}}
 !
+{% endif %}
+
+{# ============================= #}
+{# AV VLANs                      #}
+{# ============================= #}
+{% for vlan in av_vlans %}
+vlan {{vlan.id}}
+   name {{vlan.name}}
+!
+{% endfor %}
 vlan 885
    name Switch-Management
 !

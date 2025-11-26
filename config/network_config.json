@@ -42,7 +42,7 @@
       "172.22.29.253"
     ],
     "data_vlan": {
-      "id": "200",
+      "id": "10",
       "name": "desktop@ucl"
     },
     "voice_vlan": {
@@ -96,5 +96,45 @@
         "915": "10.4.28.0/25_IP_CCTV"
       }
     }
+  },
+
+"aruba-klb": {
+  "network_address": "172.22.16.0",
+  "subnet_mask": "255.255.255.0",
+  "gateway": "172.22.16.254",
+
+  "hosts_range": [
+    "172.22.16.1",
+    "172.22.16.253"
+  ],
+
+  "data_vlan": {
+    "id": "705",
+    "name": "128.41.5.0/24_UCLDesktop"
+  },
+
+  "voice_vlan": {
+    "id": "15",
+    "name": "10.11.15.0/24_Audiocodes"
+  },
+
+  "profiles": {
+    "av": {
+      "520": "10.9.40.0/24_AV_Crestron_AirMedia",
+      "530": "10.9.111.0/24_AV_Crestron_Ctrl",
+      "707": "10.9.205.0/24_AV_Crestron_NVX",
+      "712": "10.10.25.128/25_AV_Lecturecast",
+      "807": "10.8.2.0/24_AV_Q-SYS_AVoIP",
+      "909": "10.9.7.0/24_AV"
+    },
+
+    "standard": {
+      "487": "10.4.79.126/26_Cardax",
+      "733": "128.41.33.0/24_UCL_Desktop",
+      "915": "10.4.26.0/25_IP_CCTV",
+      "990": "10.100.2.0/24"
+    }
   }
+}
+
 }
