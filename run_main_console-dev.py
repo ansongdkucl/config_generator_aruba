@@ -1,83 +1,115 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+#!/usr/bin/env python3
+"""
+Aruba Switch Configuration Tool (clean modular version)
+
+Features:
+- Generate full switch config from Jinja-style templates (.j2) + network_config.json
+- Auto-fill hostname + Data VLAN from Management IP
+- Save .cfg, .json, .csv, api-*.json
+- Send full config to switch via serial console (pyserial)
+- Load Excel (port / vlan / description) and push per-port config via SSH (Netmiko, aruba_aoscx)
+"""
+
+import os
 import json
-import ipaddress
 import csv
-import threading
+import ipaddress
 import time
+import threading
 from datetime import datetime
 from pathlib import Path
 
-# Optional/External modules
-try:
-    import paramiko
-except Exception:
-    paramiko = None
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
 
+# Optional extras
 try:
     import serial
     import serial.tools.list_ports
 except Exception:
     serial = None
 
-# -----------------------------
-# Configuration defaults
-# -----------------------------
+try:
+    import pandas as pd
+except Exception:
+    pd = None
+
+try:
+    from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
+except Exception:
+    ConnectHandler = None
+
+
+# =============================================================================
+# Configuration constants
+# =============================================================================
+
 DEFAULT_HOSTNAME = "default_host"
 DEFAULT_VLAN_ID = "0"
 DEFAULT_VLAN_NAME = "default_vlan"
 DEFAULT_LOCATION = "default_location"
 
+TEMPLATE_DIR = Path("templates")
+CONFIG_DIR = Path("config")
+OUTPUT_DIR = Path("generated_configs")
 
-# -----------------------------
-# Helpers
-# -----------------------------
-def safe_mac_filename(mac: str) -> str:
-    """Return a safe filename for a MAC-based config (e.g., 1a2b3c4d5e6f.cfg)."""
-    only_hex = "".join(ch for ch in mac if ch.isalnum()).lower()
-    return f"{only_hex}.cfg" if only_hex else "config.cfg"
+TEMPLATE_DIR.mkdir(exist_ok=True)
+CONFIG_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 
-# -----------------------------
-# Template manager
-# -----------------------------
+# =============================================================================
+# Helpers / Models
+# =============================================================================
+
 class TemplateManager:
-    def __init__(self, template_dir="templates"):
-        self.template_dir = Path(template_dir)
-        self.template_dir.mkdir(exist_ok=True)
+    """Loads Jinja-style templates stored in templates/*.j2."""
 
-    def load_template(self, template_name):
-        template_file = self.template_dir / f"{template_name}.j2"
-        if template_file.exists():
-            with open(template_file, "r", encoding="utf-8") as f:
-                return f.read()
-        raise FileNotFoundError(f"Template {template_name} not found at {template_file}")
+    def __init__(self, template_dir: Path = TEMPLATE_DIR):
+        self.template_dir = template_dir
 
-    def get_available_templates(self):
-        return sorted([p.stem for p in self.template_dir.glob("*.j2")])
+    def load_template(self, template_name: str) -> str:
+        # template_name is the label from combobox – map to stem
+        mapping = {
+            "4100i - Standard": "4100i_standard",
+            "4100i - Audio Visual": "4100i_av",
+            "6300m - Standard": "6300m_standard",
+            "6300m - Audio Visual": "6300m_av",
+        }
+        stem = mapping.get(template_name, template_name)
+        path = self.template_dir / f"{stem}.j2"
+        if not path.exists():
+            raise FileNotFoundError(f"Template not found: {path}")
+        return path.read_text(encoding="utf-8")
 
 
-# -----------------------------
-# Network config model
-# -----------------------------
 class NetworkConfig:
-    def __init__(self, config_dir="config"):
-        self.config_dir = Path(config_dir)
+    """
+    Reads config/network_config.json and provides helpers:
+    - auto gateway from IP
+    - data/voice VLAN info
+    - profile VLANs (standard/av)
+    - generated hostname & trunk allowed VLANs
+    """
+
+    def __init__(self, config_dir: Path = CONFIG_DIR):
+        self.config_path = config_dir / "network_config.json"
+        self.config_dir = config_dir
         self.config_dir.mkdir(exist_ok=True)
-        self.config_file = self.config_dir / "network_config.json"
-        self.load_config()
+        self.config = {}
+        self._load_or_create_default()
 
-    def load_config(self):
-        if self.config_file.exists():
+    # ------------ core load/save ------------
+
+    def _load_or_create_default(self):
+        if self.config_path.exists():
             try:
-                with open(self.config_file, "r", encoding="utf-8") as f:
-                    self.config = json.load(f)
+                self.config = json.loads(self.config_path.read_text(encoding="utf-8"))
                 return
-            except json.JSONDecodeError as e:
-                messagebox.showerror("Config Error", f"Invalid JSON in config file: {e}")
-        self._create_default_config()
+            except Exception:
+                pass  # fall through to default
 
-    def _create_default_config(self):
+        # default minimal config
         self.config = {
             "aruba-sw": {
                 "network_address": "172.22.27.0",
@@ -85,145 +117,139 @@ class NetworkConfig:
                 "gateway": "172.22.27.254",
                 "hosts_range": ["172.22.27.1", "172.22.27.253"],
                 "data_vlan": {"id": "100", "name": "Data_VLAN"},
-                "profiles": {"av": {}, "standard": {}}
+                # voice_vlan is optional
+                "profiles": {
+                    "standard": {},
+                    "av": {}
+                }
             }
         }
-        self.save_config()
+        self.save()
 
-    def save_config(self):
-        with open(self.config_file, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=4)
+    def save(self):
+        self.config_path.write_text(json.dumps(self.config, indent=4), encoding="utf-8")
 
-    def get_network_names(self):
-        return list(self.config.keys())
+    # ------------ internal helpers ------------
 
-    def _find_network_cfg_for_ip(self, management_ip):
-        """Return the config dict for the network that contains this IP, or None."""
+    def _find_network_cfg_for_ip(self, management_ip: str):
         try:
             ip = ipaddress.IPv4Address(management_ip)
         except Exception:
             return None
 
-        for _name, cfg in self.config.items():
+        for cfg in self.config.values():
             try:
-                network = ipaddress.IPv4Network(
-                    f"{cfg['network_address']}/{cfg['subnet_mask']}", strict=False
+                net = ipaddress.IPv4Network(
+                    f"{cfg['network_address']}/{cfg['subnet_mask']}",
+                    strict=False
                 )
-                if ip in network:
+                if ip in net:
                     return cfg
             except Exception:
                 continue
         return None
 
-    def calculate_gateway(self, management_ip):
+    # ------------ public helpers ------------
+
+    def calculate_gateway(self, management_ip: str) -> str:
         cfg = self._find_network_cfg_for_ip(management_ip)
         if cfg and "gateway" in cfg:
             return cfg["gateway"]
-        # fallback: derive .254 from /24
         try:
-            network = ipaddress.IPv4Network(f"{management_ip}/24", strict=False)
-            return str(network.network_address + 254)
+            net = ipaddress.IPv4Network(f"{management_ip}/24", strict=False)
+            return str(net.network_address + 254)
         except Exception:
             return "0.0.0.0"
 
-    def get_profile_vlans(self, management_ip, profile_type):
+    def get_data_vlan_info(self, management_ip: str):
+        cfg = self._find_network_cfg_for_ip(management_ip)
+        if cfg and "data_vlan" in cfg:
+            d = cfg["data_vlan"]
+            return d.get("id", DEFAULT_VLAN_ID), d.get("name", DEFAULT_VLAN_NAME)
+        return DEFAULT_VLAN_ID, DEFAULT_VLAN_NAME
+
+    def get_voice_vlan_info(self, management_ip: str):
+        cfg = self._find_network_cfg_for_ip(management_ip)
+        if cfg and "voice_vlan" in cfg:
+            v = cfg["voice_vlan"]
+            return v.get("id", ""), v.get("name", "")
+        return "", ""
+
+    def get_profile_vlans(self, management_ip: str, profile_type: str):
         cfg = self._find_network_cfg_for_ip(management_ip)
         if not cfg:
             return {}
         return cfg.get("profiles", {}).get(profile_type, {})
 
-    def get_data_vlan_info(self, management_ip):
-        cfg = self._find_network_cfg_for_ip(management_ip)
-        if cfg and "data_vlan" in cfg:
-            return (
-                cfg["data_vlan"].get("id", DEFAULT_VLAN_ID),
-                cfg["data_vlan"].get("name", DEFAULT_VLAN_NAME),
-            )
-        return DEFAULT_VLAN_ID, DEFAULT_VLAN_NAME
-
-    def get_voice_vlan_info(self, management_ip):
-        """Return (voice_vlan_id, voice_vlan_name) for the network the IP belongs to."""
-        cfg = self._find_network_cfg_for_ip(management_ip)
-        if cfg and "voice_vlan" in cfg:
-            return (
-                cfg["voice_vlan"].get("id", ""),
-                cfg["voice_vlan"].get("name", ""),
-            )
-        return "", ""
-
-    def generate_hostname(self, management_ip, template_type):
+    def generate_hostname(self, management_ip: str, template_label: str) -> str:
         try:
             octets = str(ipaddress.IPv4Address(management_ip)).split(".")
-            if "6300" in template_type.lower():
-                prefix = "ae6000m"
-            else:
-                prefix = "ae4100i"
-            return f"{prefix}-{octets[1]}-{octets[2]}-{octets[3]}"
         except Exception:
             return DEFAULT_HOSTNAME
 
-    def detect_profile_type(self, template_type):
-        """Return 'standard' or 'av' based on template name."""
-        t = template_type.lower()
-        if "audio" in t or "visual" in t or "av" in t:
+        label = template_label.lower()
+        if "6300" in label:
+            prefix = "ae6000m"
+        else:
+            prefix = "ae4100i"
+        return f"{prefix}-{octets[1]}-{octets[2]}-{octets[3]}"
+
+    @staticmethod
+    def detect_profile_type(template_label: str) -> str:
+        t = template_label.lower()
+        if "audio" in t or "av" in t or "visual" in t:
             return "av"
         return "standard"
 
+    # VLAN collections for trunks
+    def list_all_vlan_ids(self, data_vlan_id: str, management_ip: str, profile_type: str):
+        s = set()
+        if data_vlan_id:
+            s.add(str(data_vlan_id).strip())
 
-# -----------------------------
-# SFTP uploader (Paramiko)
-# -----------------------------
-class SFTPUploader:
-    def __init__(self):
-        self.authenticated = False
-        self.ftp_server_ip = None
-        self.ftp_username = None
-        self.ftp_password = None
+        voice_id, _ = self.get_voice_vlan_info(management_ip)
+        if voice_id:
+            s.add(str(voice_id).strip())
 
-    def authenticate(self, server_ip, username, password):
-        self.ftp_server_ip = server_ip
-        self.ftp_username = username
-        self.ftp_password = password
-        self.authenticated = True
+        # fixed defaults
+        s.update(["885", "1001"])
 
-    def upload_with_sftp(self, local_file: str, remote_file: str) -> bool:
-        if not self.authenticated or not paramiko:
-            return False
+        # profile VLANs
+        for vid in self.get_profile_vlans(management_ip, profile_type).keys():
+            s.add(str(vid).strip())
+
         try:
-            transport = paramiko.Transport((self.ftp_server_ip, 22))
-            transport.connect(username=self.ftp_username, password=self.ftp_password)
-            sftp = paramiko.SFTPClient.from_transport(transport)
-            remote_directory = "ztp"
-            try:
-                sftp.mkdir(remote_directory)
-            except IOError:
-                pass
-            remote_path = f"{remote_directory}/{remote_file}"
-            sftp.put(local_file, remote_path)
-            sftp.close()
-            transport.close()
-            return True
+            return sorted(s, key=lambda x: int(x))
         except Exception:
-            return False
+            return sorted(s)
+
+    def generate_trunk_allowed_list(self, data_vlan_id: str, management_ip: str, profile_type: str):
+        return ",".join(self.list_all_vlan_ids(data_vlan_id, management_ip, profile_type))
 
 
-# -----------------------------
-# Serial console wrapper (pyserial)
-# -----------------------------
+# =============================================================================
+# Serial console wrapper
+# =============================================================================
+
 class SerialConsole:
+    """Thin wrapper around pyserial for reading/writing console output."""
+
     def __init__(self):
         self.serial_connection = None
         self.is_connected = False
         self.read_thread = None
-        self.stop_reading = False
+        self._stop_flag = False
 
-    def get_available_ports(self):
+    # ---------- discovery ----------
+
+    def list_ports(self):
         if not serial:
             return []
-        ports = serial.tools.list_ports.comports()
-        return [p.device for p in ports]
+        return [p.device for p in serial.tools.list_ports.comports()]
 
-    def connect(self, port, baudrate=115200, timeout=1):
+    # ---------- lifecycle ----------
+
+    def connect(self, port: str, baudrate: int = 115200, timeout: float = 1.0) -> bool:
         if not serial:
             return False
         try:
@@ -233,7 +259,7 @@ class SerialConsole:
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                timeout=timeout
+                timeout=timeout,
             )
             self.is_connected = True
             return True
@@ -241,591 +267,367 @@ class SerialConsole:
             return False
 
     def disconnect(self):
-        self.stop_reading = True
-        if self.serial_connection and self.serial_connection.is_open:
+        self._stop_flag = True
+        if self.read_thread and self.read_thread.is_alive():
+            try:
+                self.read_thread.join(timeout=1.0)
+            except Exception:
+                pass
+        if self.serial_connection:
             try:
                 self.serial_connection.close()
             except Exception:
                 pass
         self.is_connected = False
 
-    def send_command(self, command):
+    # ---------- IO ----------
+
+    def send(self, line: str):
         if self.serial_connection and self.is_connected:
             try:
-                self.serial_connection.write((command + "\r\n").encode("utf-8"))
-                return True
+                self.serial_connection.write((line + "\r\n").encode("utf-8"))
             except Exception:
-                return False
-        return False
+                pass
 
-    def start_reading(self, callback):
-        def read_serial():
-            while self.serial_connection and self.is_connected and not self.stop_reading:
+    def start_reader(self, callback):
+        """Start background read loop; callback(text) for each line."""
+
+        if not self.serial_connection or not self.is_connected:
+            return
+
+        def loop():
+            while self.is_connected and not self._stop_flag:
                 try:
-                    if self.serial_connection.in_waiting > 0:
-                        data = self.serial_connection.readline().decode("utf-8", errors="ignore")
+                    if self.serial_connection.in_waiting:
+                        data = self.serial_connection.readline().decode(
+                            "utf-8", errors="ignore"
+                        )
                         if data:
                             callback(data)
                     time.sleep(0.05)
                 except Exception:
                     break
 
-        self.stop_reading = False
-        self.read_thread = threading.Thread(target=read_serial, daemon=True)
+        self._stop_flag = False
+        self.read_thread = threading.Thread(target=loop, daemon=True)
         self.read_thread.start()
 
-    def stop_reading_thread(self):
-        self.stop_reading = True
-        if self.read_thread and self.read_thread.is_alive():
+
+# =============================================================================
+# Excel → Netmiko service
+# =============================================================================
+
+class ExcelPortApplier:
+    """Loads Excel and pushes port configs to Aruba CX via Netmiko."""
+
+    @staticmethod
+    def load_excel(path: str):
+        if not pd:
+            raise RuntimeError("pandas is required to load Excel files")
+        df = pd.read_excel(path)
+        required = {"port", "vlan", "description"}
+        if not required.issubset(df.columns):
+            raise ValueError("Excel must contain columns: port, vlan, description")
+        return df
+
+    @staticmethod
+    def apply_to_device(ip: str, df, console_log):
+        if not ConnectHandler:
+            console_log("Netmiko is not installed.")
+            return
+
+        username = os.environ.get("username")
+        password = os.environ.get("passwordAD")
+
+        if not username or not password:
+            console_log("Missing env vars 'username' or 'passwordAD'.")
+            return
+
+        dev = {
+            "device_type": "aruba_aoscx",
+            "host": ip,
+            "username": username,
+            "password": password,
+            "timeout": 20,
+            "conn_timeout": 15,
+            "fast_cli": False,
+            "session_log": "netmiko_session.log",
+        }
+
+        try:
+            console_log(f"Connecting to {ip} via SSH …")
+            conn = ConnectHandler(**dev)
+
+            # Learn the *actual* prompt
+            prompt = conn.find_prompt()
+            console_log(f"Connected. Prompt detected: {prompt}")
+
+            conn.config_mode()
+            console_log("Entered config mode.")
+
+        except Exception as e:
+            console_log(f"SSH error: {e}")
+            return
+
+        # --- APPLY PORT CONFIGS ---
+        for idx, row in df.iterrows():
+            port = str(row["port"]).strip()
+            vlan = str(row["vlan"]).strip()
+            desc = str(row["description"]).strip()
+
+            console_log(f"\n--- Row {idx+1} ---")
+            console_log(f"Interface {port}  VLAN {vlan}  Description '{desc}'")
+
+            cmds = [
+                f"interface {port}",
+                f"vlan access {vlan}",
+                f"description {desc}",
+            ]
+
             try:
-                self.read_thread.join(timeout=1.0)
-            except Exception:
-                pass
+                output = conn.send_config_set(cmds, exit_config_mode=False)
+                console_log(output)
+            except Exception as e:
+                console_log(f"Error: {e}")
+
+        # --- SAVE ---
+        try:
+            console_log("\nSaving configuration (write memory)…")
+            save_out = conn.send_command("write memory", expect_string=r"#")
+            console_log(save_out)
+        except Exception:
+            console_log("Warning: failed to save config.")
+
+        conn.disconnect()
+        console_log("\n✔ Excel port configuration completed.")
 
 
-# -----------------------------
-# Dialog for SFTP creds
-# -----------------------------
-class SFTPLoginDialog(simpledialog.Dialog):
-    def __init__(self, parent, title="SFTP Login"):
-        self.server_ip = None
-        self.username = None
-        self.password = None
-        super().__init__(parent, title)
+# =============================================================================
+# Main Tkinter Application
+# =============================================================================
 
-    def body(self, master):
-        ttk.Label(master, text="SFTP Server:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.server_entry = ttk.Entry(master, width=30)
-        self.server_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
-
-        ttk.Label(master, text="Username:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.user_entry = ttk.Entry(master, width=30)
-        self.user_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
-
-        ttk.Label(master, text="Password:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.pass_entry = ttk.Entry(master, width=30, show="*")
-        self.pass_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
-
-        self.server_entry.focus_set()
-        return self.server_entry
-
-    def apply(self):
-        self.server_ip = self.server_entry.get().strip()
-        self.username = self.user_entry.get().strip()
-        self.password = self.pass_entry.get().strip()
-
-
-# -----------------------------
-# Main GUI
-# -----------------------------
-class SwitchConfigGenerator:
-    def __init__(self, root):
+class SwitchConfigApp:
+    def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Aruba Switch Configuration Generator")
-        self.root.geometry("820x980")
+        self.root.title("Aruba Switch Configuration Tool")
 
-        # managers
-        self.template_manager = TemplateManager()
-        self.network_config = NetworkConfig()
-        self.sftp_uploader = SFTPUploader()
+        self.template_mgr = TemplateManager()
+        self.net_cfg = NetworkConfig()
         self.serial_console = SerialConsole()
+        self.excel_df = None  # loaded port data
 
-        self.output_dir = Path("generated_configs")
-        self.output_dir.mkdir(exist_ok=True)
+        self._build_ui()
 
-        self.com_port_combo = None
+    # ---------------- UI construction ----------------
 
-        self.create_widgets()
-        self.refresh_com_ports()
-
-    # -------- UI ---------
-    def create_widgets(self):
-        main = ttk.Frame(self.root, padding="14")
+    def _build_ui(self):
+        self.root.geometry("880x980")
+        main = ttk.Frame(self.root, padding=14)
         main.grid(row=0, column=0, sticky="nsew")
 
-        # Title
-        title = ttk.Label(main, text="Aruba Switch Configuration Generator",
-                          font=("Segoe UI", 16, "bold"))
-        title.grid(row=0, column=0, columnspan=4, pady=(0, 15))
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main.columnconfigure(0, weight=1)
+        main.columnconfigure(1, weight=1)
+        main.columnconfigure(2, weight=1)
+        main.columnconfigure(3, weight=1)
+        main.rowconfigure(9, weight=1)
 
-        # ---------- 1️⃣ Switch Template | Serial Number ----------
-        ttk.Label(main, text="Switch Template:").grid(row=1, column=0, sticky="e", padx=5, pady=4)
+        title = ttk.Label(main, text="Aruba Switch Configuration Tool",
+                          font=("Segoe UI", 16, "bold"))
+        title.grid(row=0, column=0, columnspan=4, pady=(0, 12))
+
+        # --- template + serial ---
+        ttk.Label(main, text="Switch Template:").grid(row=1, column=0, sticky="e", padx=4, pady=4)
         self.template_var = tk.StringVar()
         templates = [
             "4100i - Standard",
             "4100i - Audio Visual",
             "6300m - Standard",
-            "6300m - Audio Visual"
+            "6300m - Audio Visual",
         ]
         self.template_combo = ttk.Combobox(
             main, textvariable=self.template_var,
-            values=templates, state="readonly", width=35
+            values=templates, state="readonly", width=30
         )
-        self.template_combo.grid(row=1, column=1, sticky="ew", padx=5, pady=4)
+        self.template_combo.grid(row=1, column=1, sticky="ew", padx=4, pady=4)
         self.template_var.set(templates[0])
 
-        ttk.Label(main, text="Serial Number *:").grid(row=1, column=2, sticky="e", padx=5, pady=4)
-        self.serial_number_var = tk.StringVar()
-        self.serial_entry = ttk.Entry(main, textvariable=self.serial_number_var, width=35)
-        self.serial_entry.grid(row=1, column=3, sticky="ew", padx=5, pady=4)
+        ttk.Label(main, text="Serial Number *:").grid(row=1, column=2, sticky="e", padx=4, pady=4)
+        self.serial_var = tk.StringVar()
+        ttk.Entry(main, textvariable=self.serial_var).grid(row=1, column=3, sticky="ew", padx=4, pady=4)
 
-        # ---------- 2️⃣ Management IP | Hostname ----------
-        ttk.Label(main, text="Management IP *:").grid(row=2, column=0, sticky="e", padx=5, pady=4)
-        self.management_ip_var = tk.StringVar()
-        mgmt_entry = ttk.Entry(main, textvariable=self.management_ip_var, width=35)
-        mgmt_entry.grid(row=2, column=1, sticky="ew", padx=5, pady=4)
+        # --- mgmt ip + hostname ---
+        ttk.Label(main, text="Management IP *:").grid(row=2, column=0, sticky="e", padx=4, pady=4)
+        self.mgmt_ip_var = tk.StringVar()
+        mgmt_entry = ttk.Entry(main, textvariable=self.mgmt_ip_var)
+        mgmt_entry.grid(row=2, column=1, sticky="ew", padx=4, pady=4)
 
-        ttk.Label(main, text="Hostname:").grid(row=2, column=2, sticky="e", padx=5, pady=4)
+        ttk.Label(main, text="Hostname:").grid(row=2, column=2, sticky="e", padx=4, pady=4)
         self.hostname_var = tk.StringVar()
-        self.hostname_entry = ttk.Entry(main, textvariable=self.hostname_var, width=35)
-        self.hostname_entry.grid(row=2, column=3, sticky="ew", padx=5, pady=4)
+        ttk.Entry(main, textvariable=self.hostname_var).grid(row=2, column=3, sticky="ew", padx=4, pady=4)
 
-        # ---------- 3️⃣ Data VLAN ----------
-        ttk.Label(main, text="Data VLAN ID:").grid(row=3, column=0, sticky="e", padx=5, pady=4)
+        # --- data vlan ---
+        ttk.Label(main, text="Data VLAN ID:").grid(row=3, column=0, sticky="e", padx=4, pady=4)
         self.data_vlan_id_var = tk.StringVar()
-        self.data_vlan_id_entry = ttk.Entry(main, textvariable=self.data_vlan_id_var, width=35)
-        self.data_vlan_id_entry.grid(row=3, column=1, sticky="ew", padx=5, pady=4)
+        ttk.Entry(main, textvariable=self.data_vlan_id_var).grid(row=3, column=1, sticky="ew", padx=4, pady=4)
 
-        ttk.Label(main, text="Data VLAN Name:").grid(row=3, column=2, sticky="e", padx=5, pady=4)
+        ttk.Label(main, text="Data VLAN Name:").grid(row=3, column=2, sticky="e", padx=4, pady=4)
         self.data_vlan_name_var = tk.StringVar()
-        self.data_vlan_name_entry = ttk.Entry(main, textvariable=self.data_vlan_name_var, width=35)
-        self.data_vlan_name_entry.grid(row=3, column=3, sticky="ew", padx=5, pady=4)
+        ttk.Entry(main, textvariable=self.data_vlan_name_var).grid(row=3, column=3, sticky="ew", padx=4, pady=4)
 
-        # ---------- 4️⃣ Location | MAC Address ----------
-        ttk.Label(main, text="Location:").grid(row=4, column=0, sticky="e", padx=5, pady=4)
+        # --- location + MAC ---
+        ttk.Label(main, text="Location:").grid(row=4, column=0, sticky="e", padx=4, pady=4)
         self.location_var = tk.StringVar(value=DEFAULT_LOCATION)
-        self.location_entry = ttk.Entry(main, textvariable=self.location_var, width=35)
-        self.location_entry.grid(row=4, column=1, sticky="ew", padx=5, pady=4)
+        ttk.Entry(main, textvariable=self.location_var).grid(row=4, column=1, sticky="ew", padx=4, pady=4)
 
-        ttk.Label(main, text="MAC Address *:").grid(row=4, column=2, sticky="e", padx=5, pady=4)
-        self.mac_address_var = tk.StringVar()
-        self.mac_entry = ttk.Entry(main, textvariable=self.mac_address_var, width=35)
-        self.mac_entry.grid(row=4, column=3, sticky="ew", padx=5, pady=4)
+        ttk.Label(main, text="MAC Address *:").grid(row=4, column=2, sticky="e", padx=4, pady=4)
+        self.mac_var = tk.StringVar()
+        ttk.Entry(main, textvariable=self.mac_var).grid(row=4, column=3, sticky="ew", padx=4, pady=4)
 
-        # ---------- Upload Checkbox ----------
-        self.upload_var = tk.BooleanVar()
-        ttk.Checkbutton(
-            main,
-            text="Upload to SFTP server",
-            variable=self.upload_var,
-            command=self.on_upload_toggle
-        ).grid(row=5, column=0, columnspan=2,
-               sticky="w", padx=5, pady=(10, 8))
-
-        # ---------- Buttons ----------
+        # --- buttons row ---
         btn_frame = ttk.Frame(main)
-        btn_frame.grid(row=6, column=0, columnspan=4, pady=8)
-        ttk.Button(btn_frame, text="Generate Configuration", command=self.generate_config)\
-            .pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Clear All", command=self.clear_all)\
-            .pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Exit", command=self.root.quit)\
-            .pack(side=tk.LEFT, padx=5)
+        btn_frame.grid(row=5, column=0, columnspan=4, pady=6)
 
-        ttk.Label(
-            main,
-            text="* Required fields",
-            font=("Segoe UI", 9, "italic"),
-            foreground="red"
-        ).grid(row=7, column=0, columnspan=4, sticky="w", padx=5)
+        ttk.Button(btn_frame, text="Generate Full Config", command=self.generate_config).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frame, text="Load Excel Ports", command=self.load_excel).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frame, text="Apply Excel Ports (SSH)", command=self.apply_excel_ports).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frame, text="Clear", command=self.clear_all).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_frame, text="Exit", command=self.root.quit).pack(side=tk.LEFT, padx=4)
 
-        # ---------- Output Box ----------
-        ttk.Label(main, text="Output:").grid(row=8, column=0, sticky="w", padx=5, pady=(14, 5))
+        ttk.Label(main, text="* Required fields", foreground="red",
+                  font=("Segoe UI", 9, "italic")).grid(row=6, column=0, columnspan=4,
+                                                      sticky="w", padx=4, pady=(0, 6))
+
+        # --- output text (config) ---
+        ttk.Label(main, text="Generated Config Output:").grid(row=7, column=0, columnspan=4,
+                                                              sticky="w", padx=4, pady=(4, 2))
         self.output_text = tk.Text(main, height=10, width=100)
-        self.output_text.grid(row=9, column=0, columnspan=4, sticky="nsew", padx=5)
-        scroll = ttk.Scrollbar(main, orient="vertical", command=self.output_text.yview)
-        scroll.grid(row=9, column=4, sticky="ns")
-        self.output_text.configure(yscrollcommand=scroll.set)
+        self.output_text.grid(row=8, column=0, columnspan=4, sticky="nsew", padx=4)
+        out_scroll = ttk.Scrollbar(main, orient="vertical", command=self.output_text.yview)
+        out_scroll.grid(row=8, column=4, sticky="ns")
+        self.output_text.configure(yscrollcommand=out_scroll.set)
 
-        # ---------- Console ----------
-        console = ttk.LabelFrame(main, text="Console Connection", padding=8)
-        console.grid(row=10, column=0, columnspan=4, sticky="nsew", pady=(14, 5))
-        ttk.Label(console, text="COM Port:").grid(row=0, column=0, sticky="w")
-        self.com_port_var = tk.StringVar()
-        self.com_port_combo = ttk.Combobox(
-            console, textvariable=self.com_port_var, width=18, state="readonly"
-        )
-        self.com_port_combo.grid(row=0, column=1, padx=4)
-        ttk.Button(console, text="Refresh Ports", command=self.refresh_com_ports)\
-            .grid(row=0, column=2, padx=4)
-        self.connect_button = ttk.Button(console, text="Connect", command=self.connect_console)
-        self.connect_button.grid(row=0, column=3, padx=4)
-        self.disconnect_button = ttk.Button(
-            console, text="Disconnect", command=self.disconnect_console, state=tk.DISABLED
-        )
-        self.disconnect_button.grid(row=0, column=4, padx=4)
-        self.write_config_button = ttk.Button(
-            console,
-            text="Write Config to Console",
-            command=self.write_config_to_console,
-            state=tk.DISABLED
-        )
-        self.write_config_button.grid(row=0, column=5, padx=4)
-
-        # Console area
-        self.console_text = tk.Text(console, height=15, width=100, bg="black", fg="white")
-        self.console_text.grid(row=1, column=0, columnspan=6, sticky="nsew", pady=(8, 6))
-        cscroll = ttk.Scrollbar(console, orient="vertical", command=self.console_text.yview)
-        cscroll.grid(row=1, column=6, sticky="ns")
-        self.console_text.configure(yscrollcommand=cscroll.set)
-
-        # Command input
-        self.console_input_var = tk.StringVar()
-        cinput = ttk.Entry(console, textvariable=self.console_input_var)
-        cinput.grid(row=2, column=0, columnspan=5, sticky="ew", pady=(4, 6))
-        cinput.bind("<Return>", self.send_console_command)
-        ttk.Button(console, text="Send", command=self.send_console_command)\
-            .grid(row=2, column=5, sticky="w")
-
-        # Progress bar
-        progress = ttk.Frame(console)
-        progress.grid(row=3, column=0, columnspan=6, sticky="ew", pady=(6, 2))
-        ttk.Label(progress, text="Transfer Progress:").pack(side=tk.LEFT, padx=(4, 8))
-        self.progress = ttk.Progressbar(progress, length=400, mode="determinate", maximum=100)
-        self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        # ---------- Status ----------
-        self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(main, textvariable=self.status_var, relief="sunken")\
-            .grid(row=11, column=0, columnspan=4, sticky="ew", pady=(6, 0))
-
-        # Layout weights
-        for i in range(4):
-            main.columnconfigure(i, weight=1)
+        # --- console frame (serial + ssh log) ---
+        console = ttk.LabelFrame(main, text="Console / Log", padding=8)
+        console.grid(row=9, column=0, columnspan=4, sticky="nsew", pady=(10, 4))
         main.rowconfigure(9, weight=1)
-        console.columnconfigure(0, weight=1)
+
+        # serial controls
+        ttk.Label(console, text="COM Port:").grid(row=0, column=0, sticky="w")
+        self.com_var = tk.StringVar()
+        self.com_combo = ttk.Combobox(console, textvariable=self.com_var, width=18, state="readonly")
+        self.com_combo.grid(row=0, column=1, padx=4)
+
+        ttk.Button(console, text="Refresh", command=self.refresh_ports).grid(row=0, column=2, padx=4)
+        self.btn_connect = ttk.Button(console, text="Connect", command=self.connect_serial)
+        self.btn_connect.grid(row=0, column=3, padx=4)
+        self.btn_disconnect = ttk.Button(console, text="Disconnect", command=self.disconnect_serial,
+                                         state=tk.DISABLED)
+        self.btn_disconnect.grid(row=0, column=4, padx=4)
+        self.btn_write_cfg = ttk.Button(console, text="Write Full Config over Console",
+                                        command=self.write_config_over_console,
+                                        state=tk.DISABLED)
+        self.btn_write_cfg.grid(row=0, column=5, padx=4)
+
+        # console text
+        self.console_text = tk.Text(console, height=15, width=100, bg="black", fg="white")
+        self.console_text.grid(row=1, column=0, columnspan=6, sticky="nsew", pady=(6, 4))
         console.rowconfigure(1, weight=1)
+        console.columnconfigure(0, weight=1)
+        c_scroll = ttk.Scrollbar(console, orient="vertical", command=self.console_text.yview)
+        c_scroll.grid(row=1, column=6, sticky="ns")
+        self.console_text.configure(yscrollcommand=c_scroll.set)
 
-        # Bind auto-fill
-        mgmt_entry.bind("<FocusOut>", lambda e: self.auto_fill_all_fields())
-        self.template_combo.bind("<<ComboboxSelected>>", lambda e: self.auto_fill_all_fields())
+        # status bar
+        self.status_var = tk.StringVar(value="Ready")
+        ttk.Label(main, textvariable=self.status_var, relief="sunken").grid(
+            row=10, column=0, columnspan=4, sticky="ew", pady=(4, 0)
+        )
 
-    # -------- Console logic ---------
-    def refresh_com_ports(self):
-        ports = self.serial_console.get_available_ports()
-        if self.com_port_combo is not None:
-            self.com_port_combo["values"] = ports
-            if ports:
-                cur = self.com_port_var.get()
-                if not cur or cur not in ports:
-                    self.com_port_var.set(ports[0])
-            else:
-                self.com_port_var.set("")
+        # bindings
+        mgmt_entry.bind("<FocusOut>", lambda e: self.auto_fill_from_ip())
+        self.template_combo.bind("<<ComboboxSelected>>", lambda e: self.auto_fill_from_ip())
 
-    def connect_console(self):
-        port = self.com_port_var.get()
-        if not port:
-            messagebox.showerror("Error", "Please select a COM port")
+        # initial COM list
+        self.refresh_ports()
+
+    # ---------------- utility logging ----------------
+
+    def log_console(self, text: str):
+        self.console_text.insert(tk.END, text + "\n")
+        self.console_text.see(tk.END)
+
+    # ---------------- auto-fill hostname + VLAN ----------------
+
+    def auto_fill_from_ip(self):
+        ip = self.mgmt_ip_var.get().strip()
+        if not ip:
             return
-        ok = self.serial_console.connect(port, baudrate=115200)
-        if ok:
-            self.connect_button.config(state=tk.DISABLED)
-            self.disconnect_button.config(state=tk.NORMAL)
-            self.write_config_button.config(state=tk.NORMAL)
-            self.status_var.set(f"Connected to {port}")
-            self.serial_console.start_reading(self.console_output_callback)
-        else:
-            messagebox.showerror("Error", f"Failed to connect to {port}. Is the device attached?")
-
-    def disconnect_console(self):
-        self.serial_console.stop_reading_thread()
-        self.serial_console.disconnect()
-        self.connect_button.config(state=tk.NORMAL)
-        self.disconnect_button.config(state=tk.DISABLED)
-        self.write_config_button.config(state=tk.DISABLED)
-        self.status_var.set("Disconnected from console")
-
-    def console_output_callback(self, data):
-        def update():
-            self.console_text.insert(tk.END, data)
-            self.console_text.see(tk.END)
-        self.root.after(0, update)
-
-    def send_console_command(self, event=None):
-        cmd = self.console_input_var.get()
-        if cmd and self.serial_console.is_connected:
-            self.serial_console.send_command(cmd)
-            self.console_input_var.set("")
-
-    def write_config_to_console(self):
-        """Send configuration to an Aruba CX console."""
-        if not self.serial_console.is_connected:
-            messagebox.showerror("Error", "Not connected to console")
-            return
-
-        hostname = self.hostname_var.get().strip()
-        if not hostname:
-            messagebox.showerror("Error", "No hostname found. Please generate configuration first.")
-            return
-
-        cfg_path = self.output_dir / f"{hostname}.cfg"
-        if not cfg_path.exists():
-            messagebox.showerror("Error", f"Configuration file not found: {cfg_path}")
-            return
-
-        ser = self.serial_console.serial_connection
-        if not ser:
-            messagebox.showerror("Error", "Serial connection unavailable.")
-            return
-
-        def read_console(timeout=1.0):
-            end = time.time() + timeout
-            buf = ""
-            while time.time() < end:
-                if ser.in_waiting:
-                    buf += ser.read(ser.in_waiting).decode("utf-8", errors="ignore")
-                time.sleep(0.1)
-            return buf.lower()
-
         try:
-            self.progress["value"] = 0
-            self.status_var.set("Starting console login…")
-            self.root.update_idletasks()
-
-            # --- Stage 1: login as admin (blank password) ---
-            self.serial_console.send_command("admin")
-            time.sleep(2.0)
-
-            for _ in range(40):
-                buf = read_console(0.8)
-                if not buf:
-                    continue
-                if "password:" in buf and "configure the 'admin'" not in buf:
-                    self.serial_console.send_command("")
-                    time.sleep(1.0)
-                elif "please configure the 'admin' user account password" in buf:
-                    self.serial_console.send_command("")
-                    time.sleep(1.0)
-                elif "enter new password" in buf:
-                    self.serial_console.send_command("")
-                    time.sleep(1.0)
-                elif "confirm new password" in buf:
-                    self.serial_console.send_command("")
-                    time.sleep(1.0)
-                elif "#" in buf:
-                    break
-                time.sleep(0.3)
-
-            # --- Stage 2: enter configuration mode ---
-            self.status_var.set("Entering configuration mode…")
-            self.serial_console.send_command("configure terminal")
-            time.sleep(1.5)
-
-            # --- Stage 3: send configuration lines ---
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                lines = [l.strip() for l in f if l.strip() and not l.startswith("!")]
-
-            total = len(lines)
-            self.progress["value"] = 0
-            self.progress["maximum"] = total
-            self.status_var.set(f"Sending configuration ({total} lines)…")
-            self.root.update_idletasks()
-
-            for i, line in enumerate(lines, start=1):
-                self.serial_console.send_command(line)
-                time.sleep(0.1)
-
-                incoming = read_console(0.3)
-                if any(x in incoming for x in ["[y/n]", "(y/n)", "do you want", "confirm", "overwrite existing"]):
-                    self.serial_console.send_command("y")
-                    time.sleep(0.4)
-
-                self.progress["value"] = i
-                if i % 5 == 0 or i == total:
-                    self.status_var.set(f"Sending line {i}/{total}…")
-                    self.root.update_idletasks()
-
-            # --- Stage 4: save ---
-            self.serial_console.send_command("end")
-            time.sleep(0.5)
-            self.serial_console.send_command("write memory")
-            time.sleep(1.0)
-
-            self.progress["value"] = total
-            self.status_var.set("Configuration complete.")
-            self.root.update_idletasks()
-            messagebox.showinfo("Success", f"Configuration '{hostname}.cfg' sent successfully!")
-
-        except Exception as err:
-            self.status_var.set("Error during config send.")
-            messagebox.showerror("Error", f"Failed to send configuration:\n{err}")
-
-    # -------- SFTP ---------
-    def on_upload_toggle(self):
-        if self.upload_var.get() and not self.sftp_uploader.authenticated:
-            self.configure_sftp()
-
-    def configure_sftp(self):
-        dlg = SFTPLoginDialog(self.root)
-        if dlg.server_ip and dlg.username and dlg.password:
-            self.sftp_uploader.authenticate(dlg.server_ip, dlg.username, dlg.password)
-            messagebox.showinfo("SFTP", "SFTP credentials configured")
-        else:
-            self.upload_var.set(False)
-            messagebox.showwarning("SFTP", "SFTP configuration cancelled")
-
-    # -------- Auto-fill helpers ---------
-    def auto_fill_all_fields(self):
-        """Auto-fills hostname and VLAN info based on Management IP and selected template."""
-        mgmt_ip = self.management_ip_var.get().strip()
-        if not mgmt_ip:
-            self.status_var.set("Enter a management IP to auto-fill fields.")
-            return
-
-        try:
-            ipaddress.IPv4Address(mgmt_ip)
+            ipaddress.IPv4Address(ip)
         except ipaddress.AddressValueError:
-            self.status_var.set("Invalid IP address format.")
+            self.status_var.set("Invalid IP address")
             return
 
         try:
-            template_type = self.template_var.get()
-
-            hostname = self.network_config.generate_hostname(mgmt_ip, template_type)
+            template_label = self.template_var.get()
+            hostname = self.net_cfg.generate_hostname(ip, template_label)
             self.hostname_var.set(hostname)
 
-            vid, vname = self.network_config.get_data_vlan_info(mgmt_ip)
+            vid, vname = self.net_cfg.get_data_vlan_info(ip)
             self.data_vlan_id_var.set(vid)
             self.data_vlan_name_var.set(vname)
 
-            self.status_var.set(f"Auto-filled hostname ({hostname}) and VLAN ({vid}) for {template_type}")
+            self.status_var.set(f"Auto-filled hostname {hostname} and VLAN {vid}.")
         except Exception as e:
             self.status_var.set(f"Auto-fill error: {e}")
 
-    # -------- VLAN helpers ---------
-    def generate_profile_vlan_config(self, management_ip, profile_type):
-        vlans = self.network_config.get_profile_vlans(management_ip, profile_type)
-        out = []
-        for vlan_id, vlan_name in vlans.items():
-            out.append(f"vlan {vlan_id}")
-            out.append(f"   name {vlan_name}")
-            out.append("!")
-        return "\n".join(out) + ("\n" if out else "")
+    # ---------------- config generation ----------------
 
-    def get_all_vlan_ids(self, data_vlan_id, management_ip, profile_type):
-        vlan_ids = set()
-
-        # Data VLAN
-        if data_vlan_id:
-            vlan_ids.add(str(data_vlan_id).strip())
-
-        # Voice VLAN
-        voice_id, _ = self.network_config.get_voice_vlan_info(management_ip)
-        if voice_id:
-            vlan_ids.add(str(voice_id).strip())
-
-        # Default VLANs
-        vlan_ids.update(["885", "1001"])
-
-        # Profile VLANs
-        profile_vlans = self.network_config.get_profile_vlans(management_ip, profile_type)
-        for vid in profile_vlans.keys():
-            vlan_ids.add(str(vid).strip())
-
-        try:
-            return sorted(vlan_ids, key=lambda x: int(x))
-        except Exception:
-            return sorted(vlan_ids)
-
-    def generate_trunk_allowed_vlans(self, data_vlan_id, management_ip, profile_type):
-        vlan_ids = self.get_all_vlan_ids(data_vlan_id, management_ip, profile_type)
-        return ",".join(vlan_ids)
-
-    # -------- Aruba Central JSON helpers ---------
-    def generate_aruba_central_json(self, hostname, management_ip, data_vlan_id, data_vlan_name,
-                                    location, gateway, mac_address, serial_number, profile_type):
-
-        voice_id, voice_name = self.network_config.get_voice_vlan_info(management_ip)
-
-        central = {
-            serial_number: {
-                "_sys_data_vlan_id": data_vlan_id,
-                "_sys_data_vlan_name": data_vlan_name,
-                "_sys_voice_vlan_id": voice_id,
-                "_sys_voice_vlan_name": voice_name,
-                "_sys_gateway": gateway,
-                "_sys_hostname": hostname,
-                "_sys_lan_mac": mac_address,
-                "_sys_location": location,
-                "_sys_mgnt_ip": management_ip,
-                "_sys_serial": serial_number,
-            }
-        }
-
-        vlans = self.network_config.get_profile_vlans(management_ip, profile_type)
-        for vid, vname in vlans.items():
-            central[serial_number][f"_sys_{vid}_vlan_name"] = vname
-
-        return central
-
-    def save_csv_file(self, central_json, output_path):
-        try:
-            with open(output_path, "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                w.writerow(["Variable", "Value"])
-                for _serial, data in central_json.items():
-                    for k, v in data.items():
-                        w.writerow([k, v])
-        except Exception as e:
-            print(f"CSV save error: {e}")
-
-    # -------- Generate config ---------
     def generate_config(self):
-        if not self.management_ip_var.get().strip() or not self.mac_address_var.get().strip() or not self.serial_number_var.get().strip():
-            messagebox.showerror("Error", "Please fill in all required fields (*)")
+        # required fields
+        if not self.mgmt_ip_var.get().strip() or not self.mac_var.get().strip() or not self.serial_var.get().strip():
+            messagebox.showerror("Missing Fields", "Management IP, MAC Address and Serial Number are required.")
             return
 
-        management_ip = self.management_ip_var.get().strip()
+        ip = self.mgmt_ip_var.get().strip()
         try:
-            ipaddress.IPv4Address(management_ip)
+            ipaddress.IPv4Address(ip)
         except ipaddress.AddressValueError:
-            messagebox.showerror("Error", "Invalid Management IP address")
+            messagebox.showerror("Invalid IP", "Management IP address is invalid.")
             return
 
-        # Ensure SFTP cred if requested
-        if self.upload_var.get() and not self.sftp_uploader.authenticated:
-            if messagebox.askyesno("SFTP Not Configured", "SFTP is not configured. Configure now?"):
-                self.configure_sftp()
-            if not self.sftp_uploader.authenticated:
-                self.upload_var.set(False)
-                messagebox.showwarning("SFTP", "Upload cancelled. Will save locally only.")
-
-        # Clean output dir
-        for f in self.output_dir.glob("*.*"):
-            try:
-                f.unlink()
-            except Exception:
-                pass
-
-        self.status_var.set("Loading template...")
-        self.root.update_idletasks()
-        template_content = self.template_manager.load_template(self.template_var.get())
-
-        self.status_var.set("Calculating gateway...")
-        self.root.update_idletasks()
-        gateway = self.network_config.calculate_gateway(management_ip)
-
-        self.status_var.set("Generating configuration...")
-        self.root.update_idletasks()
+        try:
+            template_text = self.template_mgr.load_template(self.template_var.get())
+        except Exception as e:
+            messagebox.showerror("Template Error", str(e))
+            return
 
         hostname = self.hostname_var.get().strip() or DEFAULT_HOSTNAME
         data_vlan_id = self.data_vlan_id_var.get().strip() or DEFAULT_VLAN_ID
         data_vlan_name = self.data_vlan_name_var.get().strip() or DEFAULT_VLAN_NAME
         location = self.location_var.get().strip() or DEFAULT_LOCATION
-        mac_address = self.mac_address_var.get().strip()
-        serial_number = self.serial_number_var.get().strip()
-        profile_type = self.network_config.detect_profile_type(self.template_var.get())
+        mac = self.mac_var.get().strip()
+        serial_no = self.serial_var.get().strip()
 
-        profile_vlan_cfg = self.generate_profile_vlan_config(management_ip, profile_type)
-        trunk_allowed = self.generate_trunk_allowed_vlans(data_vlan_id, management_ip, profile_type)
+        gateway = self.net_cfg.calculate_gateway(ip)
+        profile_type = self.net_cfg.detect_profile_type(self.template_var.get())
+        profile_vlans = self.net_cfg.get_profile_vlans(ip, profile_type)
+        trunk_allowed = self.net_cfg.generate_trunk_allowed_list(data_vlan_id, ip, profile_type)
+        voice_id, voice_name = self.net_cfg.get_voice_vlan_info(ip)
 
-        config = template_content
+        # build profile VLAN text
+        profile_vlan_cfg = ""
+        for vid, vname in profile_vlans.items():
+            profile_vlan_cfg += f"vlan {vid}\n name {vname}\n!\n"
 
-        voice_id, voice_name = self.network_config.get_voice_vlan_info(management_ip)
+        cfg = template_text
 
-        replacements = {
+        # replacements
+        replace_map = {
             "{{hostname}}": hostname,
-            "{{management_ip}}": management_ip,
+            "{{management_ip}}": ip,
             "{{data_vlan_id}}": data_vlan_id,
             "{{data_vlan_name}}": data_vlan_name,
             "{{voice_vlan_id}}": voice_id,
@@ -834,95 +636,237 @@ class SwitchConfigGenerator:
             "{{gateway}}": gateway,
             "{{trunk_allowed_vlans}}": trunk_allowed,
         }
+        for k, v in replace_map.items():
+            cfg = cfg.replace(k, str(v))
 
-        # Replace all placeholders
-        for k, v in replacements.items():
-            config = config.replace(k, v)
+        # optional blocks
+        if "{{voice_vlan_block}}" in cfg:
+            if voice_id and voice_name:
+                vblock = f"vlan {voice_id}\n name {voice_name}\n!\n"
+            else:
+                vblock = ""
+            cfg = cfg.replace("{{voice_vlan_block}}", vblock)
 
-        # Optional voice VLAN block if template uses {{voice_vlan_block}}
-        if voice_id and voice_name and "{{voice_vlan_block}}" in config:
-            voice_block = f"vlan {voice_id}\n   name {voice_name}\n!"
-            config = config.replace("{{voice_vlan_block}}", voice_block)
+        if "{{profile_vlans}}" in cfg:
+            cfg = cfg.replace("{{profile_vlans}}", profile_vlan_cfg)
 
-        # Profile VLANs
-        if "{{profile_vlans}}" in config:
-            config = config.replace("{{profile_vlans}}", profile_vlan_cfg)
-        else:
-            if profile_vlan_cfg:
-                marker = f"vlan {data_vlan_id}"
-                idx = config.find(marker)
-                if idx != -1:
-                    end_idx = config.find("\n!", idx)
-                    if end_idx == -1:
-                        end_idx = idx + len(marker)
-                    insert_pos = end_idx + 2 if end_idx + 2 <= len(config) else len(config)
-                    config = config[:insert_pos] + "\n" + profile_vlan_cfg + config[insert_pos:]
-                else:
-                    config += "\n" + profile_vlan_cfg
+        # file paths
+        cfg_path = OUTPUT_DIR / f"{hostname}.cfg"
+        json_path = OUTPUT_DIR / f"{hostname}.json"
+        csv_path = OUTPUT_DIR / f"{hostname}.csv"
+        api_json_path = OUTPUT_DIR / f"api-{hostname}.json"
 
-        # --- Save outputs ---
-        cfg_filename = f"{hostname}.cfg"
-        json_filename = f"{hostname}.json"
-        csv_filename = f"{hostname}.csv"
-        api_json_filename = f"api-{hostname}.json"
-
-        cfg_path = self.output_dir / cfg_filename
-        json_path = self.output_dir / json_filename
-        csv_path = self.output_dir / csv_filename
-        api_json_path = self.output_dir / api_json_filename
-
-        with open(cfg_path, "w", encoding="utf-8") as f:
-            f.write(config)
-
-        central = self.generate_aruba_central_json(
-            hostname, management_ip, data_vlan_id, data_vlan_name,
-            location, gateway, mac_address, serial_number, profile_type
-        )
-        with open(json_path, "w", encoding="utf-8") as jf:
-            json.dump(central, jf, indent=2)
-        self.save_csv_file(central, csv_path)
-
-        device_data = list(central.values())[0]
-        api_payload = {
-            "total": len(device_data),
-            "variables": device_data
+        # Central-style JSON
+        central_json = {
+            serial_no: {
+                "_sys_data_vlan_id": data_vlan_id,
+                "_sys_data_vlan_name": data_vlan_name,
+                "_sys_voice_vlan_id": voice_id,
+                "_sys_voice_vlan_name": voice_name,
+                "_sys_gateway": gateway,
+                "_sys_hostname": hostname,
+                "_sys_lan_mac": mac,
+                "_sys_location": location,
+                "_sys_mgnt_ip": ip,
+                "_sys_serial": serial_no,
+            }
         }
-        with open(api_json_path, "w", encoding="utf-8") as af:
-            json.dump(api_payload, af, indent=2)
+        for vid, vname in profile_vlans.items():
+            central_json[serial_no][f"_sys_{vid}_vlan_name"] = vname
 
-        upload_msg = ""
-        if self.upload_var.get():
-            remote_name = safe_mac_filename(mac_address)
-            ok = self.sftp_uploader.upload_with_sftp(str(cfg_path), remote_name)
-            upload_msg = f"\nUploaded to SFTP as ztp/{remote_name}" if ok else "\nSFTP upload failed."
+        # write files
+        cfg_path.write_text(cfg, encoding="utf-8")
+        json_path.write_text(json.dumps(central_json, indent=2), encoding="utf-8")
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["Variable", "Value"])
+            for k, v in central_json[serial_no].items():
+                w.writerow([k, v])
 
+        api_payload = {"total": len(central_json[serial_no]), "variables": central_json[serial_no]}
+        api_json_path.write_text(json.dumps(api_payload, indent=2), encoding="utf-8")
+
+        # show output
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.output_text.delete("1.0", tk.END)
-        self.output_text.insert(tk.END, f"Generated at {timestamp}\n")
-        self.output_text.insert(tk.END, f"Saved config: {cfg_path}\n")
-        self.output_text.insert(tk.END, f"Saved Central JSON: {json_path}\n")
-        self.output_text.insert(tk.END, f"Saved Central CSV: {csv_path}\n")
-        self.output_text.insert(tk.END, f"Saved API JSON: {api_json_path}{upload_msg}\n\n")
-        self.output_text.insert(tk.END, config)
+        self.output_text.insert(tk.END, f"Generated at {ts}\n")
+        self.output_text.insert(tk.END, f"Config: {cfg_path}\n")
+        self.output_text.insert(tk.END, f"Central JSON: {json_path}\n")
+        self.output_text.insert(tk.END, f"CSV: {csv_path}\n")
+        self.output_text.insert(tk.END, f"API JSON: {api_json_path}\n\n")
+        self.output_text.insert(tk.END, cfg)
         self.output_text.see(tk.END)
-        self.status_var.set("Generated configuration.")
 
-    # -------- misc ---------
+        self.status_var.set("Configuration generated.")
+
+    # ---------------- serial console actions ----------------
+
+    def refresh_ports(self):
+        ports = self.serial_console.list_ports()
+        self.com_combo["values"] = ports
+        if ports:
+            if self.com_var.get() not in ports:
+                self.com_var.set(ports[0])
+        else:
+            self.com_var.set("")
+
+    def connect_serial(self):
+        port = self.com_var.get()
+        if not port:
+            messagebox.showerror("Serial Error", "Select a COM port.")
+            return
+        ok = self.serial_console.connect(port)
+        if not ok:
+            messagebox.showerror("Serial Error", "Failed to open serial port.")
+            return
+        self.btn_connect.config(state=tk.DISABLED)
+        self.btn_disconnect.config(state=tk.NORMAL)
+        self.btn_write_cfg.config(state=tk.NORMAL)
+        self.status_var.set(f"Connected to {port}")
+        self.serial_console.start_reader(lambda d: self.root.after(0, self._append_console, d))
+
+    def _append_console(self, text):
+        self.console_text.insert(tk.END, text)
+        self.console_text.see(tk.END)
+
+    def disconnect_serial(self):
+        self.serial_console.disconnect()
+        self.btn_connect.config(state=tk.NORMAL)
+        self.btn_disconnect.config(state=tk.DISABLED)
+        self.btn_write_cfg.config(state=tk.DISABLED)
+        self.status_var.set("Serial disconnected")
+
+    def write_config_over_console(self):
+        if not self.serial_console.is_connected:
+            messagebox.showerror("Serial Error", "Not connected to console.")
+            return
+
+        hostname = self.hostname_var.get().strip() or DEFAULT_HOSTNAME
+        cfg_path = OUTPUT_DIR / f"{hostname}.cfg"
+        if not cfg_path.exists():
+            messagebox.showerror("Missing Config", f"{cfg_path} not found. Generate config first.")
+            return
+
+        ser = self.serial_console.serial_connection
+        if not ser:
+            messagebox.showerror("Serial Error", "Serial connection missing.")
+            return
+
+        def read_for(sec=1.0):
+            end = time.time() + sec
+            buf = ""
+            while time.time() < end:
+                if ser.in_waiting:
+                    buf += ser.read(ser.in_waiting).decode("utf-8", errors="ignore")
+                time.sleep(0.1)
+            return buf.lower()
+
+        try:
+            self.status_var.set("Logging in over console…")
+            self.serial_console.send("admin")
+            time.sleep(2)
+
+            # basic login loop with blank password + default admin
+            for _ in range(30):
+                buf = read_for(0.7)
+                if "password:" in buf and "configure the 'admin'" not in buf:
+                    self.serial_console.send("")  # blank password
+                elif "enter new password" in buf or "confirm new password" in buf:
+                    self.serial_console.send("")
+                elif "#" in buf:
+                    break
+                time.sleep(0.2)
+
+            # enter config mode
+            self.serial_console.send("configure terminal")
+            time.sleep(1)
+
+            lines = []
+            for line in cfg_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("!"):
+                    lines.append(line)
+
+            self.status_var.set(f"Sending {len(lines)} config lines…")
+            for i, line in enumerate(lines, start=1):
+                self.serial_console.send(line)
+                time.sleep(0.1)
+                incoming = read_for(0.3)
+                if "[y/n]" in incoming or "(y/n)" in incoming:
+                    self.serial_console.send("y")
+                    time.sleep(0.3)
+
+                if i % 10 == 0:
+                    self.status_var.set(f"Sent {i}/{len(lines)} lines…")
+                    self.root.update_idletasks()
+
+            # save
+            self.serial_console.send("end")
+            time.sleep(0.5)
+            self.serial_console.send("write memory")
+            self.status_var.set("Config sent and saved.")
+            messagebox.showinfo("Success", "Configuration sent over console.")
+        except Exception as e:
+            messagebox.showerror("Console Error", f"Failed to send config:\n{e}")
+
+    # ---------------- Excel / SSH actions ----------------
+
+    def load_excel(self):
+        path = filedialog.askopenfilename(
+            title="Select Excel Port File",
+            filetypes=[("Excel Files", "*.xlsx *.xls")]
+        )
+        if not path:
+            return
+        try:
+            self.excel_df = ExcelPortApplier.load_excel(path)
+            messagebox.showinfo("Excel Loaded", f"Loaded {len(self.excel_df)} rows.")
+        except Exception as e:
+            messagebox.showerror("Excel Error", str(e))
+
+    def apply_excel_ports(self):
+        if self.excel_df is None:
+            messagebox.showerror("No Excel", "Load an Excel port file first.")
+            return
+        ip = self.mgmt_ip_var.get().strip()
+        if not ip:
+            messagebox.showerror("Missing IP", "Enter Management IP first.")
+            return
+        try:
+            ipaddress.IPv4Address(ip)
+        except ipaddress.AddressValueError:
+            messagebox.showerror("Invalid IP", "Management IP is invalid.")
+            return
+
+        def worker():
+            ExcelPortApplier.apply_to_device(ip, self.excel_df, self.log_console)
+            self.status_var.set("Excel port configuration completed.")
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.status_var.set("Applying Excel port configuration (SSH)…")
+
+    # ---------------- misc ----------------
+
     def clear_all(self):
         self.hostname_var.set("")
-        self.management_ip_var.set("")
-        self.location_var.set(DEFAULT_LOCATION)
+        self.mgmt_ip_var.set("")
         self.data_vlan_id_var.set("")
         self.data_vlan_name_var.set("")
-        self.mac_address_var.set("")
-        self.serial_number_var.set("")
+        self.location_var.set(DEFAULT_LOCATION)
+        self.mac_var.set("")
+        self.serial_var.set("")
         self.output_text.delete("1.0", tk.END)
         self.console_text.delete("1.0", tk.END)
-        self.status_var.set("Ready")
+        self.excel_df = None
+        self.status_var.set("Cleared. Ready.")
 
+
+# =============================================================================
+# Entrypoint
+# =============================================================================
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = SwitchConfigGenerator(root)
+    app = SwitchConfigApp(root)
     root.mainloop()
