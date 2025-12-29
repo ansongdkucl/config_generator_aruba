@@ -146,8 +146,8 @@
     "172.22.5.253"
   ],
   "data_vlan": {
-    "id": "19",
-    "name": "128.41.19.0/24_UCL_Desktop"
+    "id": "12",
+    "name": "128.41.12.0/24_UCL_Desktop"
   },
   "voice_vlan": {
     "id": "10",
@@ -181,8 +181,8 @@
   ],
 
   "data_vlan": {
-    "id": "61",
-    "name": "128.41.61.0/24_UCL_Desktop"
+    "id": "37",
+    "name": "128.41.37.0/24_UCL_Desktop"
   },
 
   "voice_vlan": {

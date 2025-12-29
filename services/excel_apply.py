@@ -14,8 +14,27 @@ class ExcelPortApplier:
 
     @staticmethod
     def load_excel(path: str):
-        df = pd.read_excel(path, dtype=str)
+        # Load file, treating the first row as the header (header=0)
+        df = pd.read_excel(path, dtype=str, header=0)
         df = df.fillna("")  # remove NaN
+
+        # --- NEW: Enforce column names for safety check ---
+        # Rename the first two columns to 'serial' and 'mgmt_ip' for validation in main.py
+        
+        # Check if a sufficient number of columns exist before renaming
+        current_columns = df.columns.tolist()
+        
+        # Dictionary for renaming: {old_name: new_name}
+        rename_map = {}
+        
+        if len(current_columns) >= 1:
+            rename_map[current_columns[0]] = 'serial'
+        if len(current_columns) >= 2:
+            rename_map[current_columns[1]] = 'mgmt_ip'
+            
+        df = df.rename(columns=rename_map)
+        # --------------------------------------------------
+        
         return df
 
     @staticmethod
@@ -49,9 +68,8 @@ class ExcelPortApplier:
             safe_log(console_widget, f"Connected. Prompt = {conn.find_prompt()}")
 
             # 💥 ALWAYS enter support-mode
-            safe_log(console_widget, "Enabling Aruba Central support-mode…")
             try:
-                conn.send_command("aruba-central support-mode", expect_string=r"#")
+                conn.send_command("support-mode", expect_string=r"#")
                 safe_log(console_widget, "Support-mode enabled.")
             except Exception:
                 safe_log(console_widget, "Warning: Could not confirm support-mode.")
@@ -64,6 +82,8 @@ class ExcelPortApplier:
             return
         # iterate rows
         for idx, row in df.iterrows():
+            # The existing logic relies on the column names 'port', 'vlan', 'description'.
+            # These columns must be present in the third column onwards (index 2, 3, 4)
             port = clean_excel_value(row.get("port"))
             vlan = clean_excel_value(row.get("vlan"))
             desc = clean_excel_value(row.get("description"))
@@ -92,4 +112,4 @@ class ExcelPortApplier:
             safe_log(console_widget, "Warning: save failed.")
 
         conn.disconnect()
-        safe_log(console_widget, "\n✔ Excel port configuration done.")
+        safe_log(console_widget, f"Disconnected from {ip}")

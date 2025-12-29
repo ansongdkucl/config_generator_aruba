@@ -1,154 +1,182 @@
 
+Last login: 2025-12-08 20:26:07 from 128.40.19.117
+User "cceadan" has logged in 39 times in the past 30 days
+ae6000m-22-29-201# 
+ae6000m-22-29-201# 
+ae6000m-22-29-201# no page
+ae6000m-22-29-201# 
+ae6000m-22-29-201# support-mode
+Invalid input: support-mode
+ae6000m-22-29-201# 
+ae6000m-22-29-201# configure term
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/1
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 807
+Invalid input: vlan
+ae6000m-22-29-201(config)# description QSC 110F LAN A
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/2
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description QSC 110F LAN B
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/3
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Sennheiser Mobile Connect - DANTE
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/4
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Sennheiser Mobile Connect - LAN
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/5
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Sennheiser Mobile Connect - POE
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/6
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 712
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Epiphan
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/7
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 12
+Invalid input: vlan
+ae6000m-22-29-201(config)# description UCL Resident PC
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/8
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Gude Rack PDU
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/9
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Wolfvision VZ-3neo.UHD
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/10
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 530
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron TSW-770-B-S
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/11
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 530
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron RMC4
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/12
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Ampetonic - DANTE
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/13
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Ampetonic - LAN
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/14
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 909
+Invalid input: vlan
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/15
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 530
+Invalid input: vlan
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/16
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/17
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX 363-C
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/18
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX D30-C
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/19
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX D30-C
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/20
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX E30-C
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/21
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX E30-C
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/22
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX E30-C
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/23
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX 384-C
+Invalid input: description
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# interface 1/1/24
+Invalid input: interface
+ae6000m-22-29-201(config)# vlan access 707
+Invalid input: vlan
+ae6000m-22-29-201(config)# description Crestron NVX 360-C
+Invalid input: description
+ae6000m-22-29-201(config)# write memory
 
-Last login: 2025-12-03 21:04:08 from 128.40.19.104
-User "cceadan" has logged in 16 times in the past 30 days
-ae4100i-22-18-245# 
-ae4100i-22-18-245# 
-ae4100i-22-18-245# no page
-ae4100i-22-18-245# 
-ae4100i-22-18-245# aruba-central support-mode
-ae4100i-22-18-245# 
-ae4100i-22-18-245# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/1
-ae4100i-22-18-245(config-if)# vlan access 530
-ae4100i-22-18-245(config-if)# description Crestron TSW-770-B-S
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/2
-ae4100i-22-18-245(config-if)# vlan access 530
-ae4100i-22-18-245(config-if)# description Crestron RMC4
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/3
-ae4100i-22-18-245(config-if)# vlan access 530
-ae4100i-22-18-245(config-if)# description Crestron USB-SW-200
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/4
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Bluestream PLA88CS
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/5
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Extron DMP 128 PLUS-AT - DANTE
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/6
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Extron DMP 128 PLUS-AT - LAN
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/7
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Gude Rack PDU
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/8
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Sennheiser Mobile Connect - DANTE
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/9
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Sennheiser Mobile Connect - LAN
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/10
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Sennheiser Mobile Connect - POE
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/11
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# description Wolfvision VZ-3neo.UHD
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/12
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/13
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/14
-ae4100i-22-18-245(config-if)# vlan access 62
-VLAN 62 not configured.
-ae4100i-22-18-245(config-if)# description UCL Resident PC
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/15
-ae4100i-22-18-245(config-if)# vlan access 712
-ae4100i-22-18-245(config-if)# description Epiphan
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/16
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/17
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/18
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/19
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/20
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/21
-ae4100i-22-18-245(config-if)# vlan access 909
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/22
-ae4100i-22-18-245(config-if)# vlan access 712
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# configure term
-ae4100i-22-18-245(config)# 
-ae4100i-22-18-245(config)# interface 1/1/23
-ae4100i-22-18-245(config-if)# vlan access 530
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# write memory
-
 Copying configuration: [\] 
 Copying configuration: [|] 
 Copying configuration: [/] 
@@ -166,58 +194,9 @@ Copying configuration: [|]
 Copying configuration: [/] 
 Copying configuration: [-] 
 Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
-Copying configuration: [\] 
-Copying configuration: [|] 
-Copying configuration: [/] 
-Copying configuration: [-] 
 Copying configuration: [Success]
-ae4100i-22-18-245(config-if)# 
-ae4100i-22-18-245(config-if)# exit
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# 
+ae6000m-22-29-201(config)# end
+ae6000m-22-29-201# 
+ae6000m-22-29-201# exit
